@@ -455,13 +455,26 @@ async function spongeWipe({ ids = [] } = {}) {
 }
 
 // artifacts published from Claude Code on this Mac, read from the publish lines in local transcripts
+const artScan = new Map();   // transcript path -> { key, hits }: only changed transcripts are read again
+const ART_MARK = Buffer.from(" at https://claude.ai/artifact/");
+function artHits(buf) {
+  const hits = []; let at = 0;
+  while ((at = buf.indexOf(ART_MARK, at)) !== -1) {
+    const before = buf.toString("utf8", Math.max(0, at - 700), at), after = buf.toString("utf8", at + 4, at + 120);
+    const f = before.match(/Published (\S+)$/), u = after.match(/^(https:\/\/claude\.ai\/artifact\/[A-Za-z0-9]+) \(Version (\d+)/);
+    if (f && u) hits.push({ file: f[1], url: u[1], version: +u[2] });
+    at += ART_MARK.length;
+  }
+  return hits;
+}
 async function myArtifacts({ limit = 60 } = {}) {
-  const out = await sh("/usr/bin/grep", ["-rHoE", "--include=*.jsonl", "Published [^ ]+ at https://claude\\.ai/artifact/[A-Za-z0-9]+ \\(Version [0-9]+", PROJECTS], { timeout: 60_000, maxBuffer: 64 << 20, env: { ...process.env, LC_ALL: "C" } });
-  const byUrl = new Map();
-  for (const line of (out || "").split("\n")) {
-    const m = line.match(/^(.+?\.jsonl):Published (\S+) at (https:\/\/claude\.ai\/artifact\/[A-Za-z0-9]+) \(Version (\d+)$/); if (!m) continue;
-    const [, transcript, file, url, v] = m; const cur = byUrl.get(url);
-    if (!cur || +v > cur.version) byUrl.set(url, { url, file, version: +v, transcript });
+  const byUrl = new Map(); const files = [];
+  for (const dir of await readdir(PROJECTS).catch(() => [])) for (const f of await readdir(join(PROJECTS, dir)).catch(() => [])) if (f.endsWith(".jsonl")) files.push(join(PROJECTS, dir, f));
+  for (const fp of files) {
+    const st = await stat(fp).catch(() => null); if (!st) continue;
+    const key = `${st.mtimeMs}:${st.size}`; let c = artScan.get(fp);
+    if (!c || c.key !== key) { c = { key, hits: artHits(await readFile(fp).catch(() => Buffer.alloc(0))) }; artScan.set(fp, c); }
+    for (const h of c.hits) { const cur = byUrl.get(h.url); if (!cur || h.version > cur.version) byUrl.set(h.url, { ...h, transcript: fp }); }
   }
   const list = await Promise.all([...byUrl.values()].map(async (a) => {
     const st = await stat(a.transcript).catch(() => null);

@@ -1361,6 +1361,7 @@ button, input { font: inherit; color: inherit; }
   const daysAgo = (iso) => { if (!iso) return ""; const d = Math.floor((Date.now() - Date.parse(iso)) / 864e5); return d <= 0 ? "today" : d === 1 ? "yesterday" : d < 30 ? `${d} days ago` : new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" }); };
   function renderArtifacts() {
     const all = S.data.artifacts, box = $("arts"), q = $("artFind").value.trim().toLowerCase();
+    if (S.artErr && !(all || []).length) { box.replaceChildren(el("li", "empty", S.artErr === "cancelled" || S.artErr === "not_granted" ? "allow the helper's my_artifacts tool to see your artifacts, then roll the pin" : `could not look them up (${S.artErr}) · quit the Claude app with ⌘Q, open it again, then roll the pin`)); $("artFind").hidden = true; $("artsCount").textContent = ""; return; }
     if (!all) { box.replaceChildren(el("li", "empty", S.mcp ? "looking through your shelves…" : "open this page in the Claude app to see your artifacts")); $("artFind").hidden = true; $("artsCount").textContent = ""; return; }
     $("artFind").hidden = all.length < 6; $("artsCount").textContent = all.length ? `${all.length} made on this Mac` : "";
     const hits = all.filter((a) => !q || a.title.toLowerCase().includes(q));
@@ -1530,7 +1531,7 @@ button, input { font: inherit; color: inherit; }
     };
     await Promise.all([
       call(HOST, "claude_sessions", { days: 5, limit: 12 }, fresh).then((res) => { S.data.sessions = res.payload?.sessions || []; ok(); setNote("sessions", null); renderSessions(); }).catch((e) => fail(e, "sessions", "Cutting mat · Claude sessions")),
-      call(HOST, "my_artifacts", {}, fresh).then((res) => { S.data.artifacts = res.payload?.artifacts || []; renderBookPages(); if (!$("book").hidden) renderArtifacts(); }).catch(() => { S.data.artifacts = S.data.artifacts || []; if (!$("book").hidden) renderArtifacts(); }),
+      call(HOST, "my_artifacts", {}, fresh).then((res) => { S.data.artifacts = res.payload?.artifacts || []; S.artErr = null; renderBookPages(); if (!$("book").hidden) renderArtifacts(); }).catch((e) => { S.artErr = e?.code || "no answer"; if (!$("book").hidden) renderArtifacts(); }),
       call(HOST, "github_prs", {}, fresh).then((res) => { S.data.prs = res.payload || { mine: [], toReview: [] }; ok(); setNote("prs", null); renderPrs(); }).catch((e) => fail(e, "prs", "Drying rack · GitHub")),
     ]);
   }
