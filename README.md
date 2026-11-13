@@ -4,7 +4,7 @@
 
 ![Clayday in the morning: corkboard with sticky notes, meeting slabs, sleepy clay lumps on the cutting mat, the drying rack and the sketchbook](docs/studio-morning.jpg)
 
-Clayday is a [Claude artifact](https://claude.ai/artifact/TNg5ybJTyXpN9SnCiJSdwF) (a three.js scene in one HTML page) plus a small local helper that reads your Claude sessions, cmux tabs and GitHub. The light follows the real clock, from dawn to dusk.
+Clayday is a Claude artifact (a three.js scene in one HTML page) plus a small local helper that reads your Claude sessions, cmux tabs and GitHub. The light follows the real clock, from dawn to dusk.
 
 ## What is on the table
 
@@ -65,7 +65,13 @@ The page gets its data through artifact capabilities:
 
 2. Add the same server to the Claude desktop app's `claude_desktop_config.json` under `mcpServers`.
 3. Quit the Claude app with ⌘Q and open it again.
-4. Open the [artifact](https://claude.ai/artifact/TNg5ybJTyXpN9SnCiJSdwF) in the Claude app and allow the connectors when it asks.
+4. Publish your own copy of the page. Open this folder in Claude Code and ask:
+
+   > Publish `studio.html` as an artifact with these capabilities: `mcp` for Google Calendar (`list_events`), Slack (`slack_search_public_and_private`, `slack_add_reaction`), Notion (`notion-create-pages`), Claude Docs (`batch`) and `host:clay-studio` (all its tools), plus `db`, `user` and `sample`.
+
+5. Open your new artifact in the Claude app and allow the connectors when it asks.
+
+Each person runs their own copy. An artifact is private to the person who published it, and it reads that person's own Slack, calendar and computer, so there is no shared page to request access to.
 
 Edits to `tools.mjs` apply at once. You do not need to restart the app.
 
