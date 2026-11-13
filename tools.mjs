@@ -31,6 +31,12 @@ const GH = process.env.CLAY_GH || ["/opt/homebrew/bin/gh", "/usr/local/bin/gh"].
 
 const TOOLS = [
   {
+    name: "my_artifacts",
+    description: "The Claude artifacts I published from Claude Code on this computer: title, link, version and when it last changed.",
+    inputSchema: { type: "object", properties: { limit: { type: "number", description: "Max artifacts (default 60)." } } },
+    annotations: { readOnlyHint: true },
+  },
+  {
     name: "studio_config",
     description: "The studio's personal settings: your name, a line about you, your Slack ids and the deploy dashboard link.",
     inputSchema: { type: "object", properties: {} },
@@ -448,11 +454,31 @@ async function spongeWipe({ ids = [] } = {}) {
   return { results };
 }
 
+// artifacts published from Claude Code on this Mac, read from the publish lines in local transcripts
+async function myArtifacts({ limit = 60 } = {}) {
+  const out = await sh("/usr/bin/grep", ["-rHoE", "--include=*.jsonl", "Published [^ ]+ at https://claude\\.ai/artifact/[A-Za-z0-9]+ \\(Version [0-9]+", PROJECTS], { timeout: 60_000, maxBuffer: 64 << 20, env: { ...process.env, LC_ALL: "C" } });
+  const byUrl = new Map();
+  for (const line of (out || "").split("\n")) {
+    const m = line.match(/^(.+?\.jsonl):Published (\S+) at (https:\/\/claude\.ai\/artifact\/[A-Za-z0-9]+) \(Version (\d+)$/); if (!m) continue;
+    const [, transcript, file, url, v] = m; const cur = byUrl.get(url);
+    if (!cur || +v > cur.version) byUrl.set(url, { url, file, version: +v, transcript });
+  }
+  const list = await Promise.all([...byUrl.values()].map(async (a) => {
+    const st = await stat(a.transcript).catch(() => null);
+    let title = "";
+    try { title = ((await readFile(a.file, "utf8")).match(/<title>([^<]{1,120})<\/title>/i) || [])[1] || ""; } catch {}
+    if (!title) title = a.file.split("/").pop().replace(/\.(html|md)$/i, "").replace(/[-_]+/g, " ").replace(/^./, (c) => c.toUpperCase());
+    return { url: a.url, title: title.trim(), version: a.version, updatedAt: st ? new Date(st.mtimeMs).toISOString() : null };
+  }));
+  list.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+  return { artifacts: list.slice(0, limit) };
+}
+
 async function studioConfig() {
   const c = await config();
   return { name: c.name || "", about: c.about || "", slack: { userId: c.slack?.userId || "", teamId: c.slack?.teamId || "", teamHandle: c.slack?.teamHandle || "" }, deployDashboardUrl: c.deployDashboardUrl || "" };
 }
 
-const HANDLERS = { studio_config: studioConfig, claude_sessions: claudeSessions, github_prs: githubPrs, open_session: openSession, close_session: closeSession, sponge_scan: spongeScan, sponge_wipe: spongeWipe };
+const HANDLERS = { my_artifacts: myArtifacts, studio_config: studioConfig, claude_sessions: claudeSessions, github_prs: githubPrs, open_session: openSession, close_session: closeSession, sponge_scan: spongeScan, sponge_wipe: spongeWipe };
 
 export { TOOLS, HANDLERS };

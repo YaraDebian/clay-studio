@@ -163,6 +163,12 @@ button, input { font: inherit; color: inherit; }
 .book .erase { border: 0; background: none; cursor: pointer; color: var(--ink-soft); font: 700 12px var(--font-body); padding: 2px 4px; }
 .book .erase.armed { color: var(--rose); }
 .book form { display: grid; gap: 2px; margin-top: 6px; }
+#book h3 { margin: 18px 0 4px; font: 400 22px/1.1 var(--font-hand); color: var(--rose); display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+#book h3 small { font: 600 12px/1 var(--font-body); color: #A592A8; }
+#artFind { width: 100%; margin: 2px 0 4px; }
+#arts li { grid-template-columns: minmax(0, 1fr) auto; }
+#arts a { color: #5B4A63; text-decoration-color: var(--rose); text-underline-offset: 3px; }
+#arts .when { font: 600 12px/1 var(--font-body); color: #A592A8; white-space: nowrap; }
 .book input { border: 0; background: none; font: 400 18px/1 var(--font-hand); color: #5B4A63; padding: 4px 0 6px; min-width: 0; }
 .book input#skLink { font: 600 13px var(--font-body); }
 .book input::placeholder { color: #A592A8; }
@@ -259,6 +265,10 @@ button, input { font: inherit; color: inherit; }
     <button class="btn alt" type="submit" style="justify-self: start; margin-top: 6px">Add idea</button>
     <span class="err" id="skErr" hidden></span>
   </form>
+  <h3 id="artsTitle">My artifacts <small id="artsCount"></small></h3>
+  <label class="sr" for="artFind">Find an artifact</label>
+  <input id="artFind" placeholder="find an artifact…" autocomplete="off" hidden>
+  <ul id="arts" aria-labelledby="artsTitle"></ul>
 </section>
 
 <nav class="sr" aria-label="Objects in the studio"><ul id="a11y"></ul></nav>
@@ -1054,7 +1064,8 @@ button, input { font: inherit; color: inherit; }
     const items = S.sketch;
     const setTex = (mesh, tex) => { const m = mesh.material[2]; if (m.map) m.map.dispose(); m.map = tex; m.needsUpdate = true; };
     setTex(pageL, pageTexture(items.slice(0, 8), 0, "Ideas & docs"));
-    setTex(pageR, pageTexture(items.slice(8, 18), 8, ""));
+    const arts = (S.data.artifacts || []).slice(0, 9).map((a, i) => ({ id: "art" + i, title: a.title }));
+    setTex(pageR, items.length > 8 || !arts.length ? pageTexture(items.slice(8, 18), 8, "") : pageTexture(arts, 0, "My artifacts"));
   }
   bookGroup.userData.info = { book: true, kindLabel: "Sketchbook", title: "Open your sketchbook" };
 
@@ -1347,7 +1358,20 @@ button, input { font: inherit; color: inherit; }
   function openBook() { $("book").hidden = false; $("scrim").hidden = false; renderSketchList(); $("skTitle").focus({ preventScroll: true }); }
   function closeBook() { $("book").hidden = true; $("scrim").hidden = true; }
   $("bookClose").addEventListener("click", closeBook); $("scrim").addEventListener("click", () => { closeBook(); closeJar(); closeSticky(); closeSponge(); });
+  const daysAgo = (iso) => { if (!iso) return ""; const d = Math.floor((Date.now() - Date.parse(iso)) / 864e5); return d <= 0 ? "today" : d === 1 ? "yesterday" : d < 30 ? `${d} days ago` : new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" }); };
+  function renderArtifacts() {
+    const all = S.data.artifacts, box = $("arts"), q = $("artFind").value.trim().toLowerCase();
+    if (!all) { box.replaceChildren(el("li", "empty", S.mcp ? "looking through your shelves…" : "open this page in the Claude app to see your artifacts")); $("artFind").hidden = true; $("artsCount").textContent = ""; return; }
+    $("artFind").hidden = all.length < 6; $("artsCount").textContent = all.length ? `${all.length} made on this Mac` : "";
+    const hits = all.filter((a) => !q || a.title.toLowerCase().includes(q));
+    if (!hits.length) { box.replaceChildren(el("li", "empty", all.length ? "nothing by that name" : "no artifacts yet · ask Claude to make one")); return; }
+    box.replaceChildren(...hits.map((a) => { const li = el("li"); const txt = el("span", "txt"); const url = safeUrl(a.url);
+      if (url) { const l = el("a", null, a.title); l.href = url; l.target = "_blank"; l.rel = "noopener"; txt.appendChild(l); } else txt.textContent = a.title;
+      li.append(txt, el("span", "when", `v${a.version} · ${daysAgo(a.updatedAt)}`)); return li; }));
+  }
+  $("artFind").addEventListener("input", renderArtifacts);
   function renderSketchList() {
+    renderArtifacts();
     const box = $("sketch"); const done = doneEver();
     if (!S.db || !S.uid) { box.replaceChildren(el("li", "empty", "open this page in Claude to keep a sketchbook")); $("addForm").hidden = true; return; }
     if (!S.sketch.length) { box.replaceChildren(el("li", "empty", "empty page… write your first idea below")); return; }
@@ -1506,6 +1530,7 @@ button, input { font: inherit; color: inherit; }
     };
     await Promise.all([
       call(HOST, "claude_sessions", { days: 5, limit: 12 }, fresh).then((res) => { S.data.sessions = res.payload?.sessions || []; ok(); setNote("sessions", null); renderSessions(); }).catch((e) => fail(e, "sessions", "Cutting mat · Claude sessions")),
+      call(HOST, "my_artifacts", {}, fresh).then((res) => { S.data.artifacts = res.payload?.artifacts || []; renderBookPages(); if (!$("book").hidden) renderArtifacts(); }).catch(() => { S.data.artifacts = S.data.artifacts || []; if (!$("book").hidden) renderArtifacts(); }),
       call(HOST, "github_prs", {}, fresh).then((res) => { S.data.prs = res.payload || { mine: [], toReview: [] }; ok(); setNote("prs", null); renderPrs(); }).catch((e) => fail(e, "prs", "Drying rack · GitHub")),
     ]);
   }
@@ -1542,7 +1567,8 @@ button, input { font: inherit; color: inherit; }
   let busy = false;
   async function loadConfig() {
     if (!S.mcp) return;
-    try { const c = (await S.mcp.callTool(HOST, "studio_config", {}, { cache: false })).payload || {}; Object.assign(CFG, c, { slack: { ...CFG.slack, ...(c.slack || {}) } }); } catch {}
+    try { const c = (await S.mcp.callTool(HOST, "studio_config", {}, { cache: false })).payload || {}; Object.assign(CFG, c, { slack: { ...CFG.slack, ...(c.slack || {}) } }); setNote("config", null); }
+    catch (e) { setNote("config", [Object.assign(el("b"), { textContent: "Your settings" }), `I could not read your settings from the helper (${e?.code || "no answer"}). Quit the Claude app with ⌘Q and open it again so it loads the helper's new tools.`], { label: "Try again", run: () => { cfgReady = loadConfig(); refreshAll(true); } }); }
     applyTime(); drawMarketCal();
   }
   async function refreshAll(fresh) {

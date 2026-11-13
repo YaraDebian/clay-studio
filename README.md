@@ -16,7 +16,7 @@ Clayday is a [Claude artifact](https://claude.ai/artifact/TNg5ybJTyXpN9SnCiJSdwF
 | **Cutting mat** | Your Claude sessions as sleepy clay lumps, and your open PRs as unfinished vases. | **Open in cmux** jumps to the tab. **Done** closes the cmux tab. |
 | **Drying rack** | Merged PRs that wait for the next production deploy, painted. Review requests for your team. | Click a piece to open it on GitHub. |
 | **Market calendar** | The last production deploy and the next one ("market day"). | Links to your deploy dashboard, if you set one. |
-| **Sketchbook** | Ideas you want to make. | Turn an idea into a Notion page or a Claude doc. |
+| **Sketchbook** | Ideas you want to make, and the Claude artifacts you published from this computer. | Turn an idea into a Notion page or a Claude doc. Find and open an artifact. |
 | **Sponge** | Things on your Mac that you no longer need. | Squeeze it to free RAM and disk (see below). |
 | **Jar** | A clay pellet for each thing you finish today. | Click it to see the list and undo. |
 | **Rolling pin** | | Roll it to refresh everything. |
@@ -44,7 +44,7 @@ It never touches the main checkout, the pool slots themselves, unpushed or uncom
 ```
 studio.html   the artifact: scene, UI and data loading
 server.mjs    stdio MCP server; it only loads tools.mjs again when that file changes
-tools.mjs     the helper's tools: claude_sessions, github_prs, open_session,
+tools.mjs     the helper's tools: studio_config, my_artifacts, claude_sessions, github_prs, open_session,
               close_session, sponge_scan, sponge_wipe
 video/        the showcase video (HyperFrames) and its capture rig
 ```
