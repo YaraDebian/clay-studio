@@ -476,6 +476,8 @@ async function myArtifacts({ limit = 60 } = {}) {
     if (!c || c.key !== key) { c = { key, hits: artHits(await readFile(fp).catch(() => Buffer.alloc(0))) }; artScan.set(fp, c); }
     for (const h of c.hits) { const cur = byUrl.get(h.url); if (!cur || h.version > cur.version) byUrl.set(h.url, { ...h, transcript: fp }); }
   }
+  const deleted = new Set((await config()).deletedArtifacts || []);   // ids of artifacts deleted from claude.ai
+  for (const u of [...byUrl.keys()]) if (deleted.has(u.split("/").pop())) byUrl.delete(u);
   const list = await Promise.all([...byUrl.values()].map(async (a) => {
     const st = await stat(a.transcript).catch(() => null);
     let title = "";
