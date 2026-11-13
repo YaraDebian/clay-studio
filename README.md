@@ -98,7 +98,3 @@ cd video/film
 python3 build.py
 npx hyperframes render -q delivery -o renders/clayday.mp4
 ```
-
-## House rules
-
-Clayday is air-dry clay, modelled by hand with tools. There is no kiln, no wheel, no firing, no throwing and no glaze.
