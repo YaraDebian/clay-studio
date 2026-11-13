@@ -1,0 +1,1547 @@
+<!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"></head><body><title>Clayday</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800&display=swap">
+<style>
+/* Layout: a full-screen 3D studio (you sit at the table, or look down from above). Paper overlays float on top:
+   plan card top-left, tapes + view switch top-right, picked-up object tag bottom-right, studio notes bottom-left. */
+:root {
+  --bg: #C5DDBE;
+  --paper: #FFFDF8;
+  --paper-line: rgba(120, 150, 210, .26);
+  --ink: #4A2C3D;
+  --ink-soft: #8A6578;
+  --pink: #F2A2BC;
+  --lilac: #BFA8F0;
+  --butter: #FAD47A;
+  --mint: #96D9B9;
+  --peach: #F7AE88;
+  --rose: #E8798F;
+  --tape: rgba(246, 217, 143, .95);
+  --shade: rgba(90, 30, 55, .35);
+  --line: #B9A2AC;
+  --font-display: "Fredoka", ui-rounded, "Arial Rounded MT Bold", system-ui, sans-serif;
+  --font-body: "Nunito", ui-rounded, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-hand: "Patrick Hand", "Comic Sans MS", "Chalkboard SE", cursive;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #1E1622; --paper: #F6EEE4; --tape: rgba(214, 196, 150, .95); --shade: rgba(0, 0, 0, .55); color-scheme: dark; }
+}
+:root[data-theme="dark"] { --bg: #1E1622; --paper: #F6EEE4; --tape: rgba(214, 196, 150, .95); --shade: rgba(0, 0, 0, .55); color-scheme: dark; }
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 var(--font-body); overflow: hidden; }
+a { color: inherit; }
+button, input { font: inherit; color: inherit; }
+:focus-visible { outline: 3px solid var(--lilac); outline-offset: 3px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+#stage { position: fixed; inset: 0; }
+#gl { width: 100%; height: 100%; display: block; touch-action: manipulation; }
+#gl.hovering { cursor: pointer; }
+.tags { position: fixed; inset: 0; pointer-events: none; }
+.grain { position: fixed; inset: 0; pointer-events: none; z-index: 5;
+  background: radial-gradient(ellipse at 50% 45%, transparent 55%, rgba(90, 55, 30, .22) 100%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .45 0 0 0 0 .35 0 0 0 0 .25 0 0 0 .55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  mix-blend-mode: multiply; opacity: .55; }
+.tag3d { position: absolute; left: 0; top: 0; transform: translate(-50%, -100%); background: var(--paper); color: #4A2C3D; font: 600 12px/1.2 var(--font-display);
+  padding: 3px 9px; border-radius: 10px; border: 2px solid var(--line); box-shadow: 0 3px 0 var(--line); max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tag3d.turn { background: var(--butter); }
+.tag3d.dim { opacity: .55; }
+.tip { position: fixed; z-index: 30; pointer-events: none; background: var(--paper); color: #4A2C3D; padding: 8px 12px; border-radius: 14px; border: 2px solid var(--line); box-shadow: 0 3px 0 var(--line);
+  max-width: 280px; font: 700 13px/1.3 var(--font-body); transform: translate(14px, 14px); }
+.tip small { display: block; font: 800 10.5px var(--font-display); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-soft); }
+
+/* overlays */
+.ui { position: fixed; z-index: 20; }
+.paper { background: var(--paper); color: #4A2C3D; border: 2px solid var(--line); box-shadow: 0 3px 0 var(--line); }
+.plan { top: calc(14px + env(safe-area-inset-top, 0px)); left: max(16px, env(safe-area-inset-left, 0px)); width: min(360px, calc(100vw - 32px));
+  padding: 16px 18px 14px; border-radius: 16px; rotate: -1deg;
+  background-image: repeating-linear-gradient(transparent 0 25px, var(--paper-line) 25px 26px); background-position: 0 54px; }
+.plan .day { font: 800 11px var(--font-body); letter-spacing: .14em; text-transform: uppercase; color: var(--ink-soft); }
+.plan h1 { margin: 2px 0 8px; font: 700 24px/1.1 var(--font-display); text-wrap: balance; }
+.plan h1 em { font-style: normal; color: var(--rose); }
+.plan p { margin: 0 0 6px; font: 400 18px/1.12 var(--font-hand); }
+.plan ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; counter-reset: m; }
+.plan li { counter-increment: m; display: grid; grid-template-columns: 22px minmax(0, 1fr); font: 400 15px/1.1 var(--font-hand); }
+.plan li::before { content: counter(m) "."; color: var(--rose); font-weight: 700; }
+.plan li small { display: block; font: 600 11.5px/1.3 var(--font-body); color: var(--ink-soft); margin-top: 1px; }
+.plan .fold { position: absolute; top: 8px; right: 10px; border: 0; background: none; cursor: pointer; font: 800 11px var(--font-body); color: var(--ink-soft); }
+.plan.folded p, .plan.folded ol { display: none; }
+
+.hud { top: calc(14px + env(safe-area-inset-top, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 10px; justify-items: end; }
+.tapes { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.tape { background: var(--tape); color: #4A2C3D; padding: 3px 10px 4px; font: 400 17px/1 var(--font-hand); rotate: var(--r, -2deg); border: 2px solid var(--line); border-radius: 8px; box-shadow: 0 3px 0 var(--line); text-align: center; }
+.tape small { display: block; font: 800 9.5px var(--font-body); letter-spacing: .08em; text-transform: uppercase; opacity: .7; margin-top: 2px; }
+.views { display: flex; gap: 6px; background: var(--paper); padding: 4px; border-radius: 18px; border: 2px solid var(--line); box-shadow: 0 3px 0 var(--line); }
+.views button, .btn { border: 0; cursor: pointer; padding: 7px 12px; border-radius: 12px; font: 600 13.5px var(--font-display); background: none; color: #4A2C3D; }
+.views button[aria-pressed="true"] { background: var(--lilac); }
+.btn { background: var(--peach); border: 2px solid var(--line); border-radius: 16px; box-shadow: 0 3px 0 var(--line); transition: transform .1s, box-shadow .1s; }
+.btn:hover { transform: translateY(-2px) rotate(-2deg); }
+.btn:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--line); }
+.btn.alt { background: var(--butter); }
+.btn.busy { opacity: .7; }
+.hud-row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.sticky { left: 50%; top: 50%; translate: -50% -50%; width: min(340px, calc(100vw - 32px)); padding: 30px 18px 16px; z-index: 35; rotate: -1.5deg; border-radius: 4px 4px 18px 4px; background: var(--sticky, #FBE9A8); display: grid; gap: 10px; }
+.sticky .pin { position: absolute; top: 8px; left: 50%; width: 16px; height: 16px; margin-left: -8px; border-radius: 50%; background: var(--rose); box-shadow: inset -2px -2px 0 rgba(0,0,0,.18), 0 2px 3px rgba(0,0,0,.3); }
+.sticky textarea { border: 0; background: none; resize: none; font: 400 22px/1.25 var(--font-hand); color: #4A2C3D; min-height: 130px; width: 100%; }
+.sticky textarea::placeholder { color: rgba(74, 44, 61, .45); }
+.sticky .row { display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.sticky .swatches { display: flex; gap: 6px; }
+.sticky .swatches button { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--line); cursor: pointer; padding: 0; }
+.sticky .swatches button[aria-pressed="true"] { outline: 3px solid var(--ink); outline-offset: 1px; }
+.sticky .err { color: #B3344F; font: 700 12px var(--font-body); }
+
+.notes-ui { left: max(16px, env(safe-area-inset-left, 0px)); bottom: calc(14px + env(safe-area-inset-bottom, 0px)); width: min(360px, calc(100vw - 32px)); display: grid; gap: 8px; }
+.scrap { background: var(--paper); color: #4A2C3D; padding: 10px 12px; font: 600 13px/1.4 var(--font-body); border: 2px solid var(--line); border-radius: 12px; box-shadow: 0 3px 0 var(--line); rotate: -.6deg; display: grid; gap: 6px; }
+.scrap b { font-family: var(--font-display); font-weight: 600; }
+.scrap code { font-size: 11px; background: rgba(0,0,0,.06); padding: 5px 7px; border-radius: 6px; overflow-x: auto; display: block; white-space: nowrap; }
+.scrap button { justify-self: start; margin-right: 6px; border: 0; cursor: pointer; padding: 5px 11px; border-radius: 11px; font-weight: 800; font-size: 12.5px; background: var(--lilac); color: #4A2C3D; }
+
+.inspect { right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(14px + env(safe-area-inset-bottom, 0px)); width: min(380px, calc(100vw - 32px)); max-height: min(62vh, 540px); overflow: auto;
+  padding: 24px 18px 16px; border-radius: 6px 6px 16px 16px; display: grid; gap: 9px; transform: translateY(16px); opacity: 0; pointer-events: none; transition: .22s; }
+.inspect.open { transform: none; opacity: 1; pointer-events: auto; }
+.inspect .hole { position: absolute; top: 9px; left: 50%; width: 11px; height: 11px; margin-left: -5px; border-radius: 50%; background: var(--bg); box-shadow: inset 0 1px 2px rgba(0,0,0,.4); }
+.inspect .kind { font: 700 10.5px var(--font-display); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-soft); }
+.inspect h3 { margin: 0; font: 700 19px/1.2 var(--font-display); overflow-wrap: anywhere; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px; }
+.meta span { font-size: 12px; font-weight: 800; padding: 3px 9px; border-radius: 10px; background: rgba(0,0,0,.06); }
+.meta .ok { background: var(--mint); } .meta .warn { background: var(--butter); } .meta .bad { background: var(--rose); color: #fff; } .meta .soft { background: var(--lilac); }
+.inspect .text { font-size: 13.5px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.inspect .text.quiet { color: var(--ink-soft); font-size: 12.5px; }
+.inspect .acts { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.inspect .go { cursor: pointer; font-weight: 800; padding: 8px 13px; border-radius: 13px; background: var(--lilac); text-decoration: none; color: #4A2C3D; }
+.inspect .done-btn { cursor: pointer; font-weight: 800; padding: 8px 13px; border-radius: 14px; background: var(--mint); color: #4A2C3D; border: 2px solid var(--line); box-shadow: 0 3px 0 var(--line); }
+.inspect .go { border: 2px solid var(--line); box-shadow: 0 3px 0 var(--line); }
+.x-btn { position: absolute; top: 6px; right: 9px; border: 0; background: none; cursor: pointer; font: 700 20px var(--font-display); color: var(--ink-soft); }
+
+.book { left: 50%; top: 50%; translate: -50% -50%; width: min(460px, calc(100vw - 32px)); max-height: min(78vh, 640px); overflow: auto; padding: 22px 20px 18px 46px; border-radius: 6px 14px 14px 6px;
+  background-image: repeating-linear-gradient(transparent 0 31px, var(--paper-line) 31px 32px); background-position: 0 58px; z-index: 35; }
+.book .spiral { position: absolute; left: 10px; top: 16px; bottom: 16px; width: 22px; background: radial-gradient(circle, transparent 4px, #9C93A3 4.5px, #9C93A3 6.5px, transparent 7px) 0 0 / 22px 26px repeat-y; }
+.book h2 { margin: 0 0 8px; font: 400 24px/1.1 var(--font-hand); color: var(--rose); }
+.book ul { list-style: none; margin: 0; padding: 0; display: grid; }
+.book li { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: 6px; align-items: center; min-height: 32px; font: 400 18px/1.05 var(--font-hand); color: #5B4A63; }
+.book .box { width: 20px; height: 20px; border: 2px solid #5B4A63; border-radius: 4px 5px 3px 6px; background: none; cursor: pointer; padding: 0; display: grid; place-items: center; }
+.book li.done .txt { text-decoration: line-through; text-decoration-color: var(--rose); opacity: .55; }
+.book li.done .box::after { content: "✓"; font: 400 15px/1 var(--font-hand); color: var(--rose); }
+.book .txt { min-width: 0; overflow-wrap: anywhere; }
+.book li.empty { display: block; color: #A592A8; }
+#spongeList { padding: 24px 22px 20px; border-radius: 28px 34px 30px 26px / 30px 26px 34px 28px; border-color: #D9A94E; box-shadow: 0 5px 0 #D9A94E, inset 0 -10px 18px rgba(201,146,52,.25), inset 0 8px 14px rgba(255,248,214,.7);
+  background-color: #FAD98A;
+  background-image:
+    radial-gradient(ellipse 9px 7px at 12% 18%, #E8B85C 60%, transparent 70%), radial-gradient(ellipse 5px 4px at 27% 9%, #E3AE4E 60%, transparent 70%),
+    radial-gradient(ellipse 12px 9px at 84% 14%, #E8B85C 60%, transparent 70%), radial-gradient(ellipse 6px 5px at 61% 7%, #E3AE4E 60%, transparent 70%),
+    radial-gradient(ellipse 7px 6px at 6% 52%, #E3AE4E 60%, transparent 70%), radial-gradient(ellipse 10px 8px at 94% 47%, #E8B85C 60%, transparent 70%),
+    radial-gradient(ellipse 8px 6px at 9% 88%, #E8B85C 60%, transparent 70%), radial-gradient(ellipse 5px 4px at 38% 95%, #E3AE4E 60%, transparent 70%),
+    radial-gradient(ellipse 11px 8px at 72% 92%, #E8B85C 60%, transparent 70%), radial-gradient(ellipse 4px 3px at 50% 50%, rgba(227,174,78,.6) 60%, transparent 70%),
+    radial-gradient(ellipse 5px 4px at 30% 40%, rgba(222,166,70,.75) 60%, transparent 72%), radial-gradient(ellipse 3px 3px at 70% 70%, rgba(222,166,70,.6) 60%, transparent 72%), radial-gradient(ellipse 7px 5px at 55% 25%, rgba(232,184,92,.7) 60%, transparent 72%);
+  background-size: auto, auto, auto, auto, auto, auto, auto, auto, auto, auto, 38px 31px, 23px 27px, 61px 53px;
+  background-position: 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 11px 7px, 3px 19px, 27px 4px; }
+#spongeList .spiral { display: none; }
+#spongeList { isolation: isolate; padding: 30px 32px 28px; }
+#spongeList::before { content: ""; position: absolute; inset: 14px; z-index: -1; border-radius: 20px 24px 22px 18px; background: #FFF9EA; box-shadow: inset 0 1px 4px rgba(170,120,40,.25); }
+#spongeList h2 { color: #B5653A; }
+#spongeList li { color: #5A3B22; }
+#spongeList .box { border-color: #7A5230; background: rgba(255,250,232,.7); }
+#spongeList .x-btn { color: #7A5230; }
+#spongeList .txt small, #spongeList .foot p, #spongeList h3 { color: #8A6A3E; }
+#spongeList li.empty { color: #8A6A3E; }
+#spongeList .size { color: #9A4E2A; }
+#spongeList .txt small { display: block; font: 600 12px/1.25 var(--font-body); color: #8A6A3E; margin-top: 2px; }
+#spongeList .size { font: 400 16px/1 var(--font-hand); color: #8E4A6B; white-space: nowrap; }
+#spongeList li.kept { opacity: .75; }
+#spongeList li.kept .box { border-style: dashed; cursor: default; }
+#spongeList li.gone .txt { text-decoration: line-through; text-decoration-color: var(--rose); opacity: .55; }
+#spongeList li.on .box::after { content: "✓"; font: 400 15px/1 var(--font-hand); color: var(--rose); }
+#spongeList h3 { margin: 14px 0 4px; font: 400 17px/1.1 var(--font-hand); color: #8A6A3E; }
+#spongeList .foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 14px; }
+#spongeList .foot p { margin: 0; font: 600 13px/1.3 var(--font-body); color: #7A5230; }
+.book .txt a { text-decoration-color: var(--pink); text-decoration-thickness: 2px; }
+.book .mk { display: flex; gap: 2px; flex-wrap: wrap; justify-content: flex-end; }
+.book .erase { border: 0; background: none; cursor: pointer; color: var(--ink-soft); font: 700 12px var(--font-body); padding: 2px 4px; }
+.book .erase.armed { color: var(--rose); }
+.book form { display: grid; gap: 2px; margin-top: 6px; }
+.book input { border: 0; background: none; font: 400 18px/1 var(--font-hand); color: #5B4A63; padding: 4px 0 6px; min-width: 0; }
+.book input#skLink { font: 600 13px var(--font-body); }
+.book input::placeholder { color: #A592A8; }
+.book .err { color: var(--rose); font: 700 12px var(--font-body); }
+.scrim { position: fixed; inset: 0; background: rgba(30, 10, 25, .25); z-index: 34; }
+
+.toast { position: fixed; left: 50%; top: calc(16px + env(safe-area-inset-top, 0px)); transform: translateX(-50%) translateY(-20px); opacity: 0; z-index: 70;
+  background: var(--tape); color: #4A2C3D; padding: 6px 16px; font: 400 19px var(--font-hand); border: 2px solid var(--line); border-radius: 14px; box-shadow: 0 3px 0 var(--line); transition: .3s; pointer-events: none; max-width: calc(100vw - 32px); text-align: center; rotate: -1deg; }
+.toast.show { opacity: 1; transform: translateX(-50%); }
+.nogl { position: fixed; inset: 0; display: grid; place-items: center; padding: 24px; }
+@media (max-width: 720px) {
+  .plan { width: calc(100vw - 32px); padding: 12px 14px 10px; }
+  .plan h1 { font-size: 20px; }
+  .plan p { font-size: 18px; }
+  .hud { top: auto; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); }
+  .notes-ui { bottom: calc(150px + env(safe-area-inset-bottom, 0px)); }
+  .inspect { bottom: calc(150px + env(safe-area-inset-bottom, 0px)); }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+</style>
+
+<div id="stage"><canvas id="gl" aria-label="Your clay studio in 3D, seen from your seat at the table. Use the object list below to move through it with the keyboard."></canvas></div>
+<div class="grain" aria-hidden="true"></div>
+<div class="tags" id="tags" aria-hidden="true"></div>
+<div class="tip" id="tip" hidden></div>
+
+<section class="ui plan paper" id="plan" aria-labelledby="greet">
+  <button class="fold" id="fold" type="button" aria-expanded="true">fold</button>
+  <div class="day" id="today">Today</div>
+  <h1 id="greet">Morning, <em>time to knead the day</em></h1>
+  <p id="pinchLine">Warming up the clay. Your sessions, pull requests, Slack and meetings are loading.</p>
+  <ol id="moves"></ol>
+</section>
+
+<div class="ui hud">
+  <div class="tapes">
+    <div class="tape" style="--r: -3deg"><b id="points">0</b><small>clay points</small></div>
+    <div class="tape" style="--r: 2deg"><b id="streak">0</b><small>day streak</small></div>
+    <div class="tape" style="--r: -1deg"><b id="level">Clay Kid</b><small id="nextLevel">level</small></div>
+  </div>
+  <div class="hud-row">
+    <button class="btn" type="button" id="refresh">Roll to refresh</button>
+  </div>
+</div>
+
+<div class="ui notes-ui" id="studioNotes" aria-live="polite"></div>
+
+<div class="ui inspect paper" id="inspect" role="dialog" aria-labelledby="inTitle" hidden>
+  <span class="hole" aria-hidden="true"></span>
+  <button class="x-btn" type="button" id="inClose" aria-label="Put it back">×</button>
+  <span class="kind" id="inKind"></span>
+  <h3 id="inTitle"></h3>
+  <div class="meta" id="inMeta"></div>
+  <div class="text" id="inText"></div>
+  <div class="text quiet" id="inMore"></div>
+  <div class="acts"><a class="go" id="inGo" target="_blank" rel="noopener">Open</a><button class="go" type="button" id="inCopy" hidden>Copy</button><button class="go" type="button" id="inEyes" hidden>👀 On it</button><button class="go" type="button" id="inDiscard" hidden>Discard</button><button class="done-btn" type="button" id="inDone">Done</button></div>
+</div>
+
+<div class="scrim" id="scrim" hidden></div>
+<form class="ui sticky paper" id="sticky" role="dialog" aria-labelledby="stickyLabel" hidden autocomplete="off">
+  <span class="pin" aria-hidden="true"></span>
+  <button class="x-btn" type="button" id="stickyClose" aria-label="Close without pinning">×</button>
+  <label class="sr" id="stickyLabel" for="stickyText">New sticky note</label>
+  <textarea id="stickyText" name="stickyText" maxlength="120" placeholder="write a note to yourself…" required></textarea>
+  <span class="err" id="stickyErr" hidden></span>
+  <div class="row">
+    <div class="swatches" role="group" aria-label="Note colour" id="stickySwatches"></div>
+    <button class="btn" type="submit">Pin it</button>
+  </div>
+</form>
+<section class="ui book paper" id="jarList" role="dialog" aria-labelledby="jarTitle" hidden>
+  <span class="spiral" aria-hidden="true"></span>
+  <button class="x-btn" type="button" id="jarClose" aria-label="Close the list">×</button>
+  <h2 id="jarTitle">Done today</h2>
+  <ul id="doneList"></ul>
+</section>
+<section class="ui book paper" id="spongeList" role="dialog" aria-labelledby="spongeTitle" hidden>
+  <span class="spiral" aria-hidden="true"></span>
+  <button class="x-btn" type="button" id="spongeClose" aria-label="Close the sponge">×</button>
+  <h2 id="spongeTitle">Sponge</h2>
+  <ul id="spongeItems"></ul>
+  <div class="foot"><p id="spongeNote"></p><button class="btn" type="button" id="spongeGo" hidden>Wipe</button></div>
+</section>
+<section class="ui book paper" id="book" role="dialog" aria-labelledby="bookTitle" hidden>
+  <span class="spiral" aria-hidden="true"></span>
+  <button class="x-btn" type="button" id="bookClose" aria-label="Close the sketchbook">×</button>
+  <h2 id="bookTitle">Ideas &amp; docs</h2>
+  <ul id="sketch"></ul>
+  <form id="addForm" autocomplete="off">
+    <label class="sr" for="skTitle">New idea</label>
+    <input id="skTitle" name="skTitle" placeholder="write the next thing to make…" maxlength="160" required>
+    <label class="sr" for="skLink">Doc link</label>
+    <input id="skLink" name="skLink" placeholder="+ paste its doc link (optional)" maxlength="600">
+    <button class="btn alt" type="submit" style="justify-self: start; margin-top: 6px">Add idea</button>
+    <span class="err" id="skErr" hidden></span>
+  </form>
+</section>
+
+<nav class="sr" aria-label="Objects in the studio"><ul id="a11y"></ul></nav>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(() => {
+  // personal settings come from the local helper (studio_config), never from this file
+  const CFG = { name: "", about: "", slack: { userId: "", teamId: "", teamHandle: "" }, deployDashboardUrl: "" };
+  let cfgReady = Promise.resolve();
+  const hi = (word) => `${word}${CFG.name ? " " + CFG.name : ""}, `;
+  const who = () => CFG.name || "the owner";
+  const HOST = "host:clay-studio";
+  const POINTS = { meeting: 5, slack: 10, pr: 15, session: 15, sketch: 20, note: 10 };
+  const STICKY = { butter: "#FBE9A8", pink: "#FBD0DC", mint: "#CFEFDD", lilac: "#E0D4F7" };
+  const LEVELS = [[0, "Clay Kid"], [100, "Pinch-pot Pro"], [300, "Coil Queen"], [700, "Loop-tool Legend"], [1500, "Studio Master"]];
+  const CLAY = { pink: 0xF2A2BC, lilac: 0xBFA8F0, butter: 0xFAD47A, mint: 0x96D9B9, peach: 0xF7AE88, rose: 0xE8798F, paper: 0xFFFDF8, wet: 0xA08A93 };
+  const CLAY_KEYS = ["pink", "lilac", "butter", "mint", "peach"];
+
+  const $ = (id) => document.getElementById(id);
+  const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
+  const safeUrl = (u, schemes = ["https:"]) => { try { const x = new URL(u); return schemes.includes(x.protocol) ? x.href : null; } catch { return null; } };
+  const pad = (n) => String(n).padStart(2, "0");
+  const dayKey = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const hm = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const ago = (iso) => { const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000); if (m < 1) return "just now"; if (m < 60) return `${m} min ago`; const h = Math.round(m / 60); return h < 24 ? `${h} h ago` : `${Math.round(h / 24)} d ago`; };
+  const hash = (s) => { let h = 2166136261; for (const c of String(s)) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; };
+  const rnd = (key, i) => (hash(key + ":" + i) % 10000) / 10000;
+  const clayFor = (key) => CLAY_KEYS[hash(key) % CLAY_KEYS.length];
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const finePointer = matchMedia("(pointer: fine)").matches;
+
+  const S = { data: { meetings: null, slack: null, sessions: null, prs: null }, progress: { points: 0, days: {} }, sketch: [], myNotes: [], mcp: null, sample: null, db: null, uid: null, notes: {} };
+  const doneToday = () => new Set(S.progress.days?.[dayKey()] || []);
+  function slackThreadKey(url) {
+    const m = String(url || "").match(/\/archives\/([A-Z0-9]+)\/p(\d{10})(\d{6})/); if (!m) return `slack:${url}`;
+    const th = String(url).match(/thread_ts=(\d+\.\d+)/); return `slack:${m[1]}:${th ? th[1] : `${m[2]}.${m[3]}`}`;
+  }
+  const slackTs = (url) => { const m = String(url || "").match(/\/p(\d{10})(\d{6})/); return m ? Number(m[1]) * 1000 : 0; };
+  function doneEver() {
+    const out = new Map();
+    for (const [d, keys] of Object.entries(S.progress.days || {})) for (const k of keys || []) {
+      const at = S.progress.titles?.[k]?.at || Date.parse(`${d}T23:59:59`);
+      out.set(k, Math.max(out.get(k) || 0, at));
+      if (k.startsWith("slack:http")) { const tk = slackThreadKey(k.slice(6)); out.set(tk, Math.max(out.get(tk) || 0, at)); }
+    }
+    for (const k of Object.keys(S.progress.discarded || {})) { out.set(k, Infinity); if (k.startsWith("slack:http")) out.set(slackThreadKey(k.slice(6)), Infinity); }
+    return out;
+  }
+  const slackDone = (done, m) => { const at = done.get(slackThreadKey(m.permalink)); return at != null && slackTs(m.permalink) <= at; };
+
+  // ---------- greeting ----------
+  const now = new Date(); const hr = now.getHours();
+  $("today").textContent = now.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
+  $("greet").firstChild.textContent = hr < 12 ? hi("Morning") : hr < 18 ? hi("Hi") : hi("Evening");
+  $("greet").querySelector("em").textContent = hr < 12 ? "time to knead the day" : hr < 18 ? "tools back in hand" : "one last pinch?";
+  $("fold").addEventListener("click", () => { const f = $("plan").classList.toggle("folded"); $("fold").textContent = f ? "unfold" : "fold"; $("fold").setAttribute("aria-expanded", String(!f)); });
+
+  function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove("show"), 2200); }
+
+  // ================= 3D =================
+  if (!window.THREE) { document.body.appendChild(Object.assign(el("div", "nogl"), { innerHTML: "" })).appendChild(el("div", "scrap", "The 3D studio could not load. Check your connection and reload the page.")); return; }
+  const T = window.THREE;
+  const canvas = $("gl");
+  let renderer;
+  try { renderer = new T.WebGLRenderer({ canvas, antialias: true }); }
+  catch { const n = el("div", "nogl"); n.appendChild(el("div", "scrap", "Your browser could not start 3D graphics. Try opening the page in the Claude desktop app or another browser.")); document.body.appendChild(n); return; }
+  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = T.PCFShadowMap;
+  renderer.outputEncoding = T.sRGBEncoding; renderer.toneMapping = T.NoToneMapping;
+  const scene = new T.Scene();
+  const camera = new T.PerspectiveCamera(40, 1, .1, 120);
+  const maxAniso = renderer.capabilities.getMaxAnisotropy();
+
+  const gradient = new T.DataTexture(new Uint8Array([105, 160, 215, 255]), 4, 1, T.LuminanceFormat);
+  gradient.minFilter = gradient.magFilter = T.NearestFilter; gradient.generateMipmaps = false; gradient.needsUpdate = true;
+  const toonMat = (o = {}) => { const { roughness, metalness, ...rest } = o; return new T.MeshToonMaterial({ gradientMap: gradient, ...rest }); };
+  const clayMat = (hex) => toonMat({ color: hex });
+  const INK = 0x4A2C3D, LINE = 0x8A6A58, INK_HOVER = 0xE8798F;
+  const outlineCache = {};
+  function outlineMat(th, hover) {
+    const k = th + (hover ? "h" : "");
+    if (!outlineCache[k]) {
+      outlineCache[k] = new T.ShaderMaterial({ side: T.BackSide, uniforms: { c: { value: new T.Color(hover ? INK_HOVER : LINE) }, t: { value: th } },
+        vertexShader: "uniform float t; void main(){ vec3 p = position + normal * t; gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0); }",
+        fragmentShader: "uniform vec3 c; void main(){ gl_FragColor = vec4(c, 1.0); }" });
+      outlineCache[k].userData.shared = true;
+    }
+    return outlineCache[k];
+  }
+  function ink(mesh, th = .015) { const o = new T.Mesh(mesh.geometry, outlineMat(th)); o.userData.outline = th; o.raycast = () => {}; mesh.add(o); return mesh; }
+  function canvasTex(w, h, draw, repeat) {
+    const c = document.createElement("canvas"); c.width = w; c.height = h; const x = c.getContext("2d"); draw(x, w, h);
+    const t = new T.CanvasTexture(c); t.encoding = T.sRGBEncoding; t.anisotropy = maxAniso;
+    if (repeat) { t.wrapS = t.wrapT = T.RepeatWrapping; t.repeat.set(repeat[0], repeat[1]); }
+    return t;
+  }
+  function wrapLines(ctx, text, maxW, maxLines) {
+    const words = String(text || "").split(/\s+/); const lines = []; let line = "";
+    for (const w of words) { const t = line ? line + " " + w : w; if (ctx.measureText(t).width > maxW && line) { lines.push(line); line = w; } else line = t; }
+    if (line) lines.push(line);
+    if (lines.length > maxLines) { lines.length = maxLines; lines[maxLines - 1] = lines[maxLines - 1].replace(/\s*\S*$/, "") + "…"; }
+    return lines;
+  }
+  // hand-made feel: smooth wobble (a function of position, so shared edges stay closed) and rounded box corners
+  function wobble(geo, amp, seed, freq = 1.6) {
+    const p = geo.attributes.position; const a = rnd(seed, 1) * 6, b = rnd(seed, 2) * 6, c = rnd(seed, 3) * 6;
+    for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+      p.setXYZ(i, x + Math.sin(y * freq + a) * Math.cos(z * freq * .8 + b) * amp, y + Math.sin(z * freq + b) * Math.cos(x * freq * .7 + c) * amp * .6, z + Math.sin(x * freq + c) * Math.cos(y * freq * .9 + a) * amp); }
+    p.needsUpdate = true; geo.computeVertexNormals(); return geo;
+  }
+  function softBox(w, h, d, seed) {
+    const r = Math.min(w, h, d) * .42; const seg = (L) => Math.max(3, Math.min(18, Math.ceil(L / Math.max(r * .8, .04))));
+    const g = new T.BoxGeometry(w, h, d, seg(w), seg(h), seg(d)); const p = g.attributes.position; const v = new T.Vector3(), inner = new T.Vector3();
+    const hw = w / 2 - r, hh = h / 2 - r, hd = d / 2 - r;
+    for (let i = 0; i < p.count; i++) { v.fromBufferAttribute(p, i); inner.set(Math.max(-hw, Math.min(hw, v.x)), Math.max(-hh, Math.min(hh, v.y)), Math.max(-hd, Math.min(hd, v.z)));
+      const n = v.clone().sub(inner); if (n.lengthSq() > 1e-9) v.copy(inner).add(n.normalize().multiplyScalar(r)); p.setXYZ(i, v.x, v.y, v.z); }
+    return wobble(g, Math.min(.05, Math.min(w, h, d) * .07 + .006), seed, 2.2);
+  }
+  function organicize(root, skip) {
+    let n = 0;
+    root.traverse((m) => {
+      if (!m.isMesh || skip.has(m) || m.userData.outline || !m.geometry?.parameters) return;
+      const g = m.geometry, P = g.parameters, seed = "o" + (n++); let ng = null;
+      if (g.type === "BoxGeometry") { if (Math.max(P.width, P.height, P.depth) > 12) return; ng = softBox(P.width, P.height, P.depth, seed); }
+      else if (g.type === "CylinderGeometry") { ng = wobble(new T.CylinderGeometry(P.radiusTop, P.radiusBottom, P.height, Math.max(P.radialSegments, 24), 8, P.openEnded, P.thetaStart, P.thetaLength), Math.min(.045, Math.max(P.radiusTop, P.radiusBottom) * .09 + .004), seed); }
+      else if (g.type === "ConeGeometry") { ng = wobble(new T.ConeGeometry(P.radius, P.height, Math.max(P.radialSegments, 12), 8, P.openEnded), P.radius * .12, seed); }
+      else if (g.type === "SphereGeometry") { ng = wobble(g.clone(), P.radius * .1, seed, 3); }
+      if (!ng) return;
+      m.geometry = ng; m.children.forEach((c) => { if (c.userData.outline) c.geometry = ng; }); g.dispose();
+    });
+  }
+  function curlPaper(geo, seed) {
+    const p = geo.attributes.position; const k = .05 + rnd(seed, 1) * .06, tw = (rnd(seed, 2) - .5) * .08;
+    for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i); p.setZ(i, k * x * x + tw * x * y + .03 * Math.sin(y * 3 + x)); }
+    p.needsUpdate = true; geo.computeVertexNormals(); return geo;
+  }
+  const shadowy = (m, cast = true, receive = true, th = .015) => { m.castShadow = cast; m.receiveShadow = receive; if (th) ink(m, th); return m; };
+
+  // ---- lights ----
+  const hemi = new T.HemisphereLight(0xfff1f6, 0xd9b8a8, .7); scene.add(hemi);
+  const sun = new T.DirectionalLight(0xfff2e2, 1.15); sun.position.set(5, 12, 2); sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048); Object.assign(sun.shadow.camera, { left: -12, right: 12, top: 10, bottom: -10, near: 1, far: 40 }); sun.shadow.bias = -.0006; sun.shadow.radius = 4;
+  scene.add(sun);
+  const fill = new T.DirectionalLight(0xffd9e6, .35); fill.position.set(-8, 6, 10); scene.add(fill);
+  const lampLight = new T.PointLight(0xffc58a, 0, 26, 1.6); lampLight.position.set(-8.35, 2.3, -3.3); lampLight.castShadow = true; lampLight.shadow.mapSize.set(1024, 1024); scene.add(lampLight);
+
+  // ---- room ----
+  const wallCanvas = document.createElement("canvas"); wallCanvas.width = wallCanvas.height = 256;
+  const wallMap = new T.CanvasTexture(wallCanvas); wallMap.encoding = T.sRGBEncoding; wallMap.wrapS = wallMap.wrapT = T.RepeatWrapping; wallMap.repeat.set(9, 4);
+  function drawWall(base, dayness) {
+    const x = wallCanvas.getContext("2d"); x.fillStyle = "#" + base.getHexString(); x.fillRect(0, 0, 256, 256);
+    const tint = (hex, k = 1) => "#" + new T.Color(hex).lerp(base, 1 - (.35 + .65 * dayness) * k).getHexString();
+    const flower = (cx, cy, r, petal, rot) => {
+      x.fillStyle = tint(0x5E9A62, .7); x.beginPath(); x.ellipse(cx + r * 1.6, cy + r * 1.1, r * .9, r * .38, .6, 0, Math.PI * 2); x.fill();
+      x.fillStyle = tint(petal); for (let k = 0; k < 5; k++) { const a = rot + k * Math.PI * 2 / 5; x.beginPath(); x.ellipse(cx + Math.cos(a) * r * .62, cy + Math.sin(a) * r * .62, r * .55, r * .4, a, 0, Math.PI * 2); x.fill(); }
+      x.fillStyle = tint(0xF3C96A); x.beginPath(); x.arc(cx, cy, r * .3, 0, Math.PI * 2); x.fill(); };
+    const sprig = (cx, cy, rot) => { x.save(); x.translate(cx, cy); x.rotate(rot); x.strokeStyle = tint(0x5E9A62, .6); x.lineWidth = 1.5;
+      x.beginPath(); x.moveTo(0, 6); x.lineTo(0, -6); x.stroke(); x.fillStyle = tint(0x6FAE72, .6);
+      [[-1, -3], [1, 0], [-1, 3]].forEach(([sx, sy]) => { x.beginPath(); x.ellipse(sx * 3, sy, 3, 1.4, sx * .7, 0, Math.PI * 2); x.fill(); }); x.restore(); };
+    flower(48, 56, 9, 0xF2A9BE, .2); flower(176, 56, 8, 0xFFF6EA, 1.1); flower(112, 168, 9, 0xFFF6EA, .7); flower(240, 168, 8, 0xF2A9BE, 1.6); flower(-16, 168, 8, 0xF2A9BE, 1.6);
+    sprig(120, 62, .5); sprig(232, 92, -.6); sprig(44, 186, -.4); sprig(176, 216, .7); sprig(8, 100, .3);
+    wallMap.needsUpdate = true;
+  }
+  const wall = new T.Mesh(new T.PlaneGeometry(40, 18), toonMat({ map: wallMap }));
+  wall.position.set(0, 8, -5.3); wall.receiveShadow = true; scene.add(wall);
+  const skirting = shadowy(new T.Mesh(new T.BoxGeometry(40, .5, .2), clayMat(0xF4EFE6)), false, true); skirting.position.set(0, .25, -5.2); scene.add(skirting);
+
+  const woodTex = canvasTex(512, 256, (x, w, h) => {
+    x.fillStyle = "#EFC088"; x.fillRect(0, 0, w, h);
+    x.strokeStyle = "#D69A5E"; x.lineWidth = 6; x.lineCap = "round";
+    for (let i = 1; i < 4; i++) { x.beginPath(); x.moveTo(0, i * h / 4); x.lineTo(w, i * h / 4); x.stroke(); }
+    x.lineWidth = 4; [[60, 30, 140], [300, 95, 120], [140, 160, 90], [380, 220, 110]].forEach(([gx, gy, len]) => { x.beginPath(); x.moveTo(gx, gy); x.quadraticCurveTo(gx + len / 2, gy - 10, gx + len, gy); x.stroke(); });
+  });
+  const table = shadowy(new T.Mesh(new T.BoxGeometry(22, .6, 11), toonMat({ map: woodTex, roughness: .8 })), false, true);
+  table.position.set(0, -.3, 0); scene.add(table);
+
+  // corkboard
+  const corkTex = canvasTex(512, 256, (x, w, h) => {
+    x.fillStyle = "#F0B07A"; x.fillRect(0, 0, w, h);
+    x.fillStyle = "#DE9A60"; for (let i = 0; i < 140; i++) { x.beginPath(); x.arc((i * 97.13) % w, (i * 53.71) % h, 2.5 + (i % 3), 0, Math.PI * 2); x.fill(); }
+  });
+  const corkFrame = shadowy(new T.Mesh(new T.BoxGeometry(8.4, 4.8, .16), clayMat(0xF7F1E8)), true, true); corkFrame.position.set(-3.6, 3.5, -5.18); scene.add(corkFrame);
+  const cork = new T.Mesh(new T.PlaneGeometry(7.9, 4.3), toonMat({ map: corkTex, roughness: 1 })); cork.position.set(-3.6, 3.5, -5.0); cork.receiveShadow = true; scene.add(cork);
+  // hand-modelled name plaque at the top of the board
+  const signCanvas = document.createElement("canvas"); signCanvas.width = 768; signCanvas.height = 180;
+  const signMap = new T.CanvasTexture(signCanvas); signMap.encoding = T.sRGBEncoding; signMap.anisotropy = maxAniso;
+  const drawSign = () => { const x = signCanvas.getContext("2d"), w = 768, h = 180; x.clearRect(0, 0, w, h); x.textAlign = "center"; x.textBaseline = "middle";
+    x.font = "600 112px 'Fredoka', ui-rounded, sans-serif"; x.lineJoin = "round"; x.lineWidth = 14; x.strokeStyle = "#FFF6EE"; x.strokeText("Clayday", w / 2, h / 2 + 4);
+    x.fillStyle = "#8E4A6B"; x.fillText("Clayday", w / 2, h / 2 + 4);
+    x.fillStyle = "#F4A6BC"; [[70, 52], [700, 128], [96, 132], [676, 46]].forEach(([cx, cy]) => { x.beginPath(); x.arc(cx, cy, 9, 0, Math.PI * 2); x.fill(); });
+    signMap.needsUpdate = true; };
+  drawSign(); document.fonts?.load("600 112px Fredoka").then(drawSign, () => {});
+  const sign = new T.Group(); sign.position.set(-3.6, 5.45, -4.86); sign.rotation.z = -.015; sign.scale.setScalar(.65); scene.add(sign);
+  sign.add(shadowy(new T.Mesh(softBox(3.7, .9, .14, "sign"), clayMat(0xFBD0DC)), false, true));
+  { const face = new T.Mesh(new T.PlaneGeometry(3.5, .82), toonMat({ map: signMap, transparent: true })); face.position.z = .09; sign.add(face);
+    [-1.66, 1.66].forEach((px) => { const pin = shadowy(new T.Mesh(new T.SphereGeometry(.08, 14, 10), clayMat(CLAY.butter))); pin.position.set(px, .3, .1); sign.add(pin); }); }
+
+  // window
+  const skyCanvas = document.createElement("canvas"); skyCanvas.width = skyCanvas.height = 256;
+  const skyMap = new T.CanvasTexture(skyCanvas); skyMap.encoding = T.sRGBEncoding;
+  function drawSky(st, h) {
+    const x = skyCanvas.getContext("2d"), w = 256, H = 256;
+    const g = x.createLinearGradient(0, 0, 0, H); g.addColorStop(0, "#" + st.sky1.getHexString()); g.addColorStop(.75, "#" + st.sky2.getHexString()); x.fillStyle = g; x.fillRect(0, 0, w, H);
+    const day = 1 - st.stars;
+    if (st.stars > .02) { x.globalAlpha = st.stars;
+      for (let k = 0; k < 40; k++) { const sx = rnd("star", k) * w, sy = rnd("star", k + 50) * 160, r = .6 + rnd("star", k + 99) * 1.4; x.fillStyle = "rgba(255,248,220,.9)"; x.beginPath(); x.arc(sx, sy, r, 0, Math.PI * 2); x.fill(); }
+      const np = (((h - 19.5 + 24) % 24) / 11.5); if (np >= 0 && np <= 1) { const mx = 30 + np * 196, my = 170 - Math.sin(np * Math.PI) * 130;
+        const glow = x.createRadialGradient(mx, my, 6, mx, my, 50); glow.addColorStop(0, "rgba(255,246,210,.55)"); glow.addColorStop(1, "rgba(255,246,210,0)"); x.fillStyle = glow; x.fillRect(mx - 50, my - 50, 100, 100);
+        x.fillStyle = "#FFF4D6"; x.beginPath(); x.arc(mx, my, 15, 0, Math.PI * 2); x.fill(); }
+      x.globalAlpha = 1; }
+    const dp = (h - 6.5) / (20 - 6.5);
+    if (dp > 0 && dp < 1 && day > .05) { const sx = 30 + dp * 196, sy = 175 - Math.sin(dp * Math.PI) * 140;
+      const glow = x.createRadialGradient(sx, sy, 8, sx, sy, 80); glow.addColorStop(0, `rgba(255,244,214,${.85 * day})`); glow.addColorStop(1, "rgba(255,244,214,0)"); x.fillStyle = glow; x.fillRect(sx - 80, sy - 80, 160, 160);
+      x.globalAlpha = day; x.fillStyle = h < 9 || h > 17.5 ? "#FFE2B8" : "#FFF8E2"; x.beginPath(); x.arc(sx, sy, 16, 0, Math.PI * 2); x.fill(); x.globalAlpha = 1; }
+    // towering cumulus: stacked puffs, lit tops, blue-grey bellies
+    if (st.cloud > .02) { const drift = ((Date.now() / 60000) % 90) / 90 * 50;
+      const cumulus = (cx, cy, k) => {
+        const puffs = [[0, 0, 26], [24, -10, 30], [50, 2, 24], [14, -34, 24], [38, -38, 20], [-20, 6, 18], [70, 8, 16]];
+        x.globalAlpha = st.cloud; x.fillStyle = "#C9D6E6"; puffs.forEach(([dx, dy, r]) => { x.beginPath(); x.arc(cx + dx * k, cy + dy * k + 5 * k, r * k, 0, Math.PI * 2); x.fill(); });
+        x.fillStyle = "#FFFFFF"; puffs.forEach(([dx, dy, r]) => { x.beginPath(); x.arc(cx + dx * k - 2 * k, cy + dy * k - 2 * k, r * k * .92, 0, Math.PI * 2); x.fill(); });
+        x.globalAlpha = 1; };
+      cumulus(30 + drift, 110, 1.05); cumulus(150 + drift * .6, 70, .75); cumulus(-60 + drift * 1.2, 60, .6); }
+    // far hills and a few round trees
+    const hillFar = new T.Color(0x8FB8A0).lerp(new T.Color(0x2B3550), st.stars * .85), hillNear = new T.Color(0x6FA77A).lerp(new T.Color(0x232B40), st.stars * .85);
+    x.fillStyle = "#" + hillFar.getHexString(); x.beginPath(); x.moveTo(0, 200); x.quadraticCurveTo(70, 165, 140, 190); x.quadraticCurveTo(200, 168, 256, 185); x.lineTo(256, 256); x.lineTo(0, 256); x.fill();
+    x.fillStyle = "#" + hillNear.getHexString(); x.beginPath(); x.moveTo(0, 225); x.quadraticCurveTo(90, 200, 170, 222); x.quadraticCurveTo(220, 210, 256, 218); x.lineTo(256, 256); x.lineTo(0, 256); x.fill();
+    [[40, 205, 12], [56, 208, 9], [190, 200, 13], [208, 204, 9], [120, 212, 8]].forEach(([tx, ty, r]) => { x.fillStyle = "#" + hillNear.clone().lerp(new T.Color(0x3E6B4A), .45 * day).getHexString(); x.beginPath(); x.arc(tx, ty - r, r, 0, Math.PI * 2); x.fill(); x.fillRect(tx - 1.5, ty - 2, 3, 8); });
+    skyMap.needsUpdate = true;
+  }
+  const sky = new T.Mesh(new T.PlaneGeometry(4.2, 3.4), new T.MeshBasicMaterial({ map: skyMap, toneMapped: false })); sky.position.set(5.3, 4.6, -5.25); scene.add(sky);
+  const rayTex = canvasTex(64, 256, (x, w, h) => { const g = x.createLinearGradient(0, 0, 0, h); g.addColorStop(0, "rgba(255,246,220,.9)"); g.addColorStop(1, "rgba(255,246,220,0)"); x.fillStyle = g; x.fillRect(0, 0, w, h);
+    const s2 = x.createLinearGradient(0, 0, w, 0); s2.addColorStop(0, "rgba(0,0,0,1)"); s2.addColorStop(.5, "rgba(0,0,0,0)"); s2.addColorStop(1, "rgba(0,0,0,1)"); x.globalCompositeOperation = "destination-out"; x.fillStyle = s2; x.fillRect(0, 0, w, h); });
+  const rays = [];
+  [[3.6, 1.1], [4.6, 1.5], [5.6, .9]].forEach(([rx, wd], i) => {
+    const r = new T.Mesh(new T.PlaneGeometry(wd, 9), new T.MeshBasicMaterial({ map: rayTex, transparent: true, opacity: .15, depthWrite: false, blending: T.AdditiveBlending, side: T.DoubleSide }));
+    r.position.set(rx - 1.0, 3.2, -1.4); r.rotation.set(-.95, 0, .35); scene.add(r); rays.push(r); });
+  const ivy = new T.Group(); scene.add(ivy);
+  for (let i = 0; i < 26; i++) { const t = i / 25; const leaf = shadowy(new T.Mesh(new T.SphereGeometry(.13, 10, 8), clayMat([0x4FA86A, 0x5DB876, 0x3E8F56][i % 3])), true, true, .01);
+    leaf.scale.set(1, .55, .8); leaf.position.set(3.05 + Math.sin(t * 9) * .18 + (i % 2) * .12, 6.5 - t * 3.4, -5.0 + (i % 2) * .08); leaf.rotation.set(.3, i, .6 * (i % 2 ? 1 : -1)); ivy.add(leaf); }
+  for (let i = 0; i < 14; i++) { const leaf = shadowy(new T.Mesh(new T.SphereGeometry(.12, 10, 8), clayMat([0x4FA86A, 0x5DB876][i % 2])), true, true, .01); leaf.scale.set(1, .55, .8);
+    leaf.position.set(3.2 + i * .3, 6.5 - Math.sin(i * .5) * .25, -5.0); leaf.rotation.set(.2, i, .5); ivy.add(leaf); }
+  const frameMat = clayMat(0xFFF7F0, .6);
+  [[5.3, 6.35, 4.6, .22], [5.3, 2.85, 4.6, .3], [3.1, 4.6, .22, 3.7], [7.5, 4.6, .22, 3.7], [5.3, 4.6, .1, 3.4], [5.3, 4.6, 4.2, .1]].forEach(([px, py, w, h]) => {
+    const b = shadowy(new T.Mesh(new T.BoxGeometry(w, h, .22), frameMat), true, true); b.position.set(px, py, -5.15); scene.add(b);
+  });
+  const sill = shadowy(new T.Mesh(new T.BoxGeometry(5.2, .14, .6), frameMat)); sill.position.set(5.3, 2.68, -4.95); scene.add(sill);
+  // little drying succulent pot on the sill (decor)
+  const pot = shadowy(new T.Mesh(new T.CylinderGeometry(.28, .22, .4, 24), clayMat(CLAY.peach))); pot.position.set(6.7, 2.95, -4.95); scene.add(pot);
+  const plant = shadowy(new T.Mesh(new T.SphereGeometry(.26, 16, 12), clayMat(0x5DB876))); plant.scale.set(1, .8, 1); plant.position.set(6.7, 3.25, -4.95); scene.add(plant);
+
+  // dust motes in the window light
+  const motesGeo = new T.BufferGeometry(); const motePos = new Float32Array(70 * 3);
+  for (let i = 0; i < 70; i++) { motePos[i * 3] = 1 + Math.random() * 6; motePos[i * 3 + 1] = .5 + Math.random() * 6; motePos[i * 3 + 2] = -4.6 + Math.random() * 6; }
+  motesGeo.setAttribute("position", new T.BufferAttribute(motePos, 3));
+  const motes = new T.Points(motesGeo, new T.PointsMaterial({ color: 0xffffff, size: .05, transparent: true, opacity: .55, depthWrite: false })); scene.add(motes);
+
+  // work board
+  const board = shadowy(new T.Mesh(new T.BoxGeometry(8.6, .16, 2.3), toonMat({ map: woodTex, color: 0xB98568 }))); board.position.set(-3.3, .08, -3.4); scene.add(board);
+  // cutting mat
+  const matTex = canvasTex(1024, 704, (x, w, h) => {
+    x.fillStyle = "#84CFB0"; x.fillRect(0, 0, w, h);
+    x.strokeStyle = "rgba(255,255,255,.7)"; x.lineWidth = 3;
+    for (let gx = 0; gx <= w; gx += 64) { x.beginPath(); x.moveTo(gx, 0); x.lineTo(gx, h); x.stroke(); }
+    for (let gy = 0; gy <= h; gy += 64) { x.beginPath(); x.moveTo(0, gy); x.lineTo(w, gy); x.stroke(); }
+    x.strokeStyle = "#fff"; x.lineWidth = 7; x.strokeRect(24, 24, w - 48, h - 48);
+    x.fillStyle = "#fff"; x.font = "700 22px Fredoka, sans-serif"; for (let n = 0; n <= 14; n += 2) x.fillText(String(n), 22 + n * 64, 18);
+  });
+  const mat = shadowy(new T.Mesh(new T.BoxGeometry(7.8, .03, 5.4), toonMat({ map: matTex, roughness: .95 })), false, true); mat.position.set(-3.5, .015, 1.4); scene.add(mat);
+
+  // drying rack
+  const rackMat = toonMat({ color: 0xC9B8E6 });
+  const RACK = { x: 5.3, z: -3.4, w: 5.0, d: 1.5, shelves: [.18, 1.9, 3.62] };
+  [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([sx, sz]) => { const p = shadowy(new T.Mesh(new T.BoxGeometry(.16, 4.2, .16), rackMat)); p.position.set(RACK.x + sx * RACK.w / 2, 2.1, RACK.z + sz * RACK.d / 2); scene.add(p); });
+  RACK.shelves.forEach((y) => { for (let i = 0; i < 6; i++) { const slat = shadowy(new T.Mesh(new T.BoxGeometry(RACK.w, .07, .18), rackMat)); slat.position.set(RACK.x, y, RACK.z - RACK.d / 2 + .15 + i * .24); scene.add(slat); } });
+
+  // sketchbook (pages get a canvas texture with your ideas)
+  const bookGroup = new T.Group(); bookGroup.position.set(3.0, 0, 2.2); bookGroup.rotation.y = -.12; scene.add(bookGroup);
+  const cover = shadowy(new T.Mesh(new T.BoxGeometry(4.7, .1, 3.2), clayMat(0xBFA8F0, .8))); cover.position.y = .05; bookGroup.add(cover);
+  const pageL = shadowy(new T.Mesh(new T.BoxGeometry(2.25, .08, 3.0), [clayMat(0xFFFDF8), clayMat(0xFFFDF8), clayMat(0xFFFDF8), clayMat(0xFFFDF8), clayMat(0xFFFDF8), clayMat(0xFFFDF8)]));
+  const pageR = pageL.clone(); pageR.material = pageL.material.map((m) => m.clone());
+  pageL.position.set(-1.16, .15, 0); pageL.rotation.z = .05; pageR.position.set(1.16, .15, 0); pageR.rotation.z = -.05; bookGroup.add(pageL, pageR);
+  for (let i = 0; i < 9; i++) { const ring = new T.Mesh(new T.TorusGeometry(.12, .025, 8, 20), toonMat({ color: 0xB9B1C0, roughness: .3, metalness: .6 })); ring.rotation.y = Math.PI / 2; ring.position.set(0, .2, -1.3 + i * .33); bookGroup.add(ring); }
+  const pencil = shadowy(new T.Mesh(new T.CylinderGeometry(.06, .06, 2.4, 6), clayMat(0xFAD47A, .6))); pencil.rotation.z = Math.PI / 2; pencil.rotation.y = .5; pencil.position.set(.8, .27, 1.75); bookGroup.add(pencil);
+
+  // jar
+  const JAR = new T.Vector3(6.5, 0, .7);
+  const jarGlass = new T.Mesh(new T.CylinderGeometry(.62, .56, 1.5, 40, 1, true), toonMat({ color: 0xffffff, roughness: .05, metalness: 0, transparent: true, opacity: .22, side: T.DoubleSide, depthWrite: false }));
+  jarGlass.position.set(JAR.x, .75, JAR.z); scene.add(jarGlass);
+  jarGlass.userData.info = { jar: true, kindLabel: "Pellet jar", title: "See what you finished today" };
+  const jarBase = shadowy(new T.Mesh(new T.CylinderGeometry(.56, .56, .06, 40), toonMat({ color: 0xffffff, transparent: true, opacity: .35, roughness: .1 }))); jarBase.position.set(JAR.x, .03, JAR.z); scene.add(jarBase);
+  const jarLid = shadowy(new T.Mesh(new T.CylinderGeometry(.66, .66, .22, 40), clayMat(CLAY.lilac, .7))); jarLid.position.set(JAR.x + .95, .11, JAR.z + .55); jarLid.rotation.x = .08; scene.add(jarLid);
+  let jarLabel = null;
+  // rolling pin = refresh
+  const pinGroup = new T.Group(); pinGroup.position.set(.2, .26, 4.1); scene.add(pinGroup);
+  const roller = shadowy(new T.Mesh(new T.CylinderGeometry(.26, .26, 2.6, 32), clayMat(0xF3E2C4))); roller.rotation.z = Math.PI / 2; pinGroup.add(roller);
+  [-1, 1].forEach((s) => { const hnd = shadowy(new T.Mesh(new T.CylinderGeometry(.1, .12, .8, 16), clayMat(0xE8798F))); hnd.rotation.z = Math.PI / 2; hnd.position.x = s * 1.7; pinGroup.add(hnd); });
+  pinGroup.userData.info = { refresh: true, kindLabel: "Rolling pin", title: "Roll to refresh everything" };
+  // sponge + water cup + loop tool (decor)
+  const sponge = new T.Group(); sponge.position.set(5.0, .22, -.5); sponge.rotation.y = .3; scene.add(sponge);
+  sponge.add(shadowy(new T.Mesh(softBox(1.1, .44, .75, "sponge"), clayMat(0xFAD47A, 1))));
+  for (let i = 0; i < 14; i++) { const pore = new T.Mesh(new T.SphereGeometry(.035 + (i % 3) * .012, 8, 6), toonMat({ color: 0xD9A94E })); pore.position.set(-.45 + ((i * 37) % 90) / 100, .225, -.3 + ((i * 53) % 60) / 100); pore.scale.y = .35; sponge.add(pore); }
+  sponge.userData.info = { sponge: true, kindLabel: "Sponge", title: "Wipe away what you no longer need" };
+  const cup = shadowy(new T.Mesh(new T.CylinderGeometry(.42, .36, .9, 28, 1, true), toonMat({ color: CLAY.mint, roughness: .5, side: T.DoubleSide }))); cup.position.set(-7.8, .45, 3.6); scene.add(cup);
+  const water = new T.Mesh(new T.CircleGeometry(.39, 28), toonMat({ color: 0xBFD9E8, roughness: .05, transparent: true, opacity: .8 })); water.rotation.x = -Math.PI / 2; water.position.set(-7.8, .7, 3.6); scene.add(water);
+  const loopTool = new T.Group(); loopTool.position.set(-.6, .07, 3.2); loopTool.rotation.y = .7; scene.add(loopTool);
+  const lt = shadowy(new T.Mesh(new T.CylinderGeometry(.06, .06, 1.8, 10), clayMat(0xE8798F, .5))); lt.rotation.z = Math.PI / 2; loopTool.add(lt);
+  const loop = shadowy(new T.Mesh(new T.TorusGeometry(.14, .02, 8, 20), toonMat({ color: 0xC9C4CC, metalness: .7, roughness: .3 }))); loop.position.x = 1.02; loopTool.add(loop);
+  const glowTex = canvasTex(128, 128, (x, w, h) => { const g = x.createRadialGradient(64, 64, 0, 64, 64, 64); g.addColorStop(0, "rgba(255,226,160,1)"); g.addColorStop(.35, "rgba(255,196,120,.45)"); g.addColorStop(1, "rgba(255,180,100,0)"); x.fillStyle = g; x.fillRect(0, 0, w, h); });
+  const glow = (size, op) => { const sp = new T.Sprite(new T.SpriteMaterial({ map: glowTex, transparent: true, opacity: op, depthWrite: false, blending: T.AdditiveBlending })); sp.scale.set(size, size, 1); return sp; };
+  // a table lamp: hand-pinched ceramic base, pleated polka-dot shade with a scalloped trim, and a pull chain
+  const lamp = new T.Group(); lamp.position.set(-8.35, 0, -3.5); scene.add(lamp);
+  const lampBase = shadowy(new T.Mesh(new T.LatheGeometry(new T.SplineCurve([new T.Vector2(0, 0), new T.Vector2(.5, 0), new T.Vector2(.62, .12), new T.Vector2(.78, .6), new T.Vector2(.6, 1.15), new T.Vector2(.26, 1.5), new T.Vector2(.16, 1.7)]).getPoints(26).concat([new T.Vector2(0, 1.7)]), 32), clayMat(0xBFA8F0)));
+  lamp.add(lampBase);
+  [[.45, 0xFFF6EC], [1.0, 0xFAD47A]].forEach(([y, c]) => { const band = new T.Mesh(new T.TorusGeometry(y < .8 ? .76 : .68, .035, 8, 32), clayMat(c)); band.rotation.x = Math.PI / 2; band.position.y = y; lamp.add(band); });
+  const neck = shadowy(new T.Mesh(new T.CylinderGeometry(.05, .05, .7, 10), toonMat({ color: 0xD9B36A }))); neck.position.y = 2.0; lamp.add(neck);
+  const capMat = toonMat({ color: 0xFFFFFF, side: T.DoubleSide, emissive: 0xFFC890, emissiveIntensity: 0 });
+  capMat.map = canvasTex(512, 128, (x, w, h) => { x.fillStyle = "#F7C6D4"; x.fillRect(0, 0, w, h);
+    for (let k = 0; k < 32; k++) { x.fillStyle = k % 2 ? "rgba(255,255,255,.22)" : "rgba(190,90,120,.10)"; x.fillRect(k * 16, 0, 16, h); }      // pleats
+    x.fillStyle = "#FFF6EC"; for (let k = 0; k < 16; k++) { x.beginPath(); x.arc(k * 32 + 16, k % 2 ? 44 : 78, 6, 0, Math.PI * 2); x.fill(); } });
+  const shade = shadowy(new T.Mesh(new T.CylinderGeometry(.62, 1.15, 1.25, 36, 1, true), capMat)); shade.position.y = 2.75; lamp.add(shade);
+  for (let k = 0; k < 18; k++) { const a = k / 18 * Math.PI * 2; const sc = new T.Mesh(new T.SphereGeometry(.13, 10, 8), clayMat(0xFFF6EC)); sc.scale.set(1, .8, .5); sc.position.set(Math.cos(a) * 1.15, 2.12, Math.sin(a) * 1.15); sc.rotation.y = -a + Math.PI / 2; lamp.add(sc); }
+  const finial = shadowy(new T.Mesh(new T.SphereGeometry(.09, 12, 10), toonMat({ color: 0xD9B36A }))); finial.position.y = 3.45; lamp.add(finial);
+  const chain = new T.Mesh(new T.CylinderGeometry(.012, .012, .55, 5), toonMat({ color: 0xD9B36A })); chain.position.set(.45, 1.9, .5); lamp.add(chain);
+  const bead = shadowy(new T.Mesh(new T.SphereGeometry(.07, 12, 10), clayMat(0xE8798F))); bead.position.set(.45, 1.6, .5); lamp.add(bead);
+  const bulb = glow(3.6, .6); bulb.position.set(0, 2.45, .3); lamp.add(bulb);
+  const anims = [];
+  // ---- plants in the corners ----
+  const LEAF = [0x4FA86A, 0x3E9459, 0x6CC07F];
+  const swaying = [];
+  function plantPot(x, z, r, h, color) {
+    const g = new T.Group(); g.position.set(x, 0, z); scene.add(g);
+    const body = shadowy(new T.Mesh(new T.CylinderGeometry(r, r * .78, h, 28), clayMat(color))); body.position.y = h / 2; g.add(body);
+    const rim = shadowy(new T.Mesh(new T.CylinderGeometry(r * 1.08, r * 1.08, h * .18, 28), clayMat(color))); rim.position.y = h * .95; g.add(rim);
+    const soil = new T.Mesh(new T.CircleGeometry(r * .95, 24), clayMat(0x8A6A58)); soil.rotation.x = -Math.PI / 2; soil.position.y = h * 1.04; g.add(soil);
+    return g;
+  }
+  // snake plant, back right
+  { const g = plantPot(8.9, -4.3, .55, .9, CLAY.peach); const leaves = new T.Group(); leaves.position.y = .9; g.add(leaves);
+    for (let i = 0; i < 7; i++) { const blade = shadowy(new T.Mesh(new T.ConeGeometry(.16, 2 + rnd("snake", i) * 1.4, 4), clayMat(LEAF[i % 3]))); blade.scale.z = .35;
+      const a = i / 7 * Math.PI * 2; blade.position.set(Math.cos(a) * .22, (1 + rnd("snake", i) * .7), Math.sin(a) * .22); blade.rotation.set(Math.sin(a) * .18, a, -Math.cos(a) * .18); leaves.add(blade); }
+    swaying.push([leaves, .03, 0]); }
+  // round leafy plant, front left
+  { const g = plantPot(-8.75, -1.3, .45, .7, CLAY.lilac); const bush = new T.Group(); bush.position.y = .8; g.add(bush);
+    for (let i = 0; i < 9; i++) { const a = i / 9 * Math.PI * 2, up = rnd("bush", i);
+      const stem = new T.Mesh(new T.CylinderGeometry(.03, .03, .6 + up * .5, 6), clayMat(0x3E8F56)); stem.position.set(Math.cos(a) * .15, .3 + up * .25, Math.sin(a) * .15); stem.rotation.set(Math.sin(a) * .5, 0, -Math.cos(a) * .5); bush.add(stem);
+      const leaf = shadowy(new T.Mesh(new T.SphereGeometry(.32, 16, 12), clayMat(LEAF[i % 3]))); leaf.scale.set(1, .45, .75); leaf.position.set(Math.cos(a) * (.45 + up * .2), .55 + up * .5, Math.sin(a) * (.45 + up * .2)); leaf.rotation.y = -a; leaf.rotation.z = -.4; bush.add(leaf); }
+    swaying.push([bush, .04, 1.3]); }
+  // little succulent, back left by the lamp
+  { const g = plantPot(4.0, -4.85, .3, .42, CLAY.mint); g.position.y = 2.75; const ros = new T.Group(); ros.position.y = .5; g.add(ros);
+    for (let ring = 0; ring < 2; ring++) for (let i = 0; i < 7; i++) { const a = i / 7 * Math.PI * 2 + ring * .4;
+      const petal = shadowy(new T.Mesh(new T.ConeGeometry(.08, .34 - ring * .1, 8), clayMat(ring ? 0x7CC98C : 0x4FA86A))); petal.position.set(Math.cos(a) * (.16 - ring * .08), .08 + ring * .06, Math.sin(a) * (.16 - ring * .08)); petal.rotation.set(Math.sin(a) * (1 - ring * .4), 0, -Math.cos(a) * (1 - ring * .4)); ros.add(petal); } }
+
+  // ---- a hot cup of tea ----
+  const tea = new T.Group(); tea.position.set(5.95, 0, 3.0); tea.rotation.y = -.5; scene.add(tea);
+  const saucer = shadowy(new T.Mesh(new T.CylinderGeometry(.62, .5, .07, 32), clayMat(0xFFF7F0))); saucer.position.y = .035; tea.add(saucer);
+  const mugMat = toonMat({ color: 0xFFFFFF, side: T.DoubleSide });
+  mugMat.map = canvasTex(256, 64, (x, w, h) => { x.fillStyle = "#" + new T.Color(CLAY.pink).getHexString(); x.fillRect(0, 0, w, h); x.fillStyle = "rgba(255,255,255,.9)"; for (let c = 0; c < 10; c++) { x.beginPath(); x.arc(c * 26 + 10, c % 2 ? 22 : 44, 6, 0, Math.PI * 2); x.fill(); } });
+  const mug = shadowy(new T.Mesh(new T.CylinderGeometry(.36, .32, .62, 32, 1, true), mugMat)); mug.position.y = .38; tea.add(mug);
+  const mugBase = new T.Mesh(new T.CircleGeometry(.32, 32), clayMat(CLAY.pink)); mugBase.rotation.x = -Math.PI / 2; mugBase.position.y = .08; tea.add(mugBase);
+  const handle = shadowy(new T.Mesh(new T.TorusGeometry(.17, .05, 10, 20, Math.PI * 1.25), clayMat(CLAY.pink))); handle.position.set(.4, .4, 0); handle.rotation.z = -Math.PI * .62; tea.add(handle);
+  const brew = new T.Mesh(new T.CircleGeometry(.33, 32), clayMat(0xC98A5A)); brew.rotation.x = -Math.PI / 2; brew.position.y = .62; tea.add(brew);
+  const tagString = new T.Mesh(new T.CylinderGeometry(.007, .007, .55, 4), new T.MeshBasicMaterial({ color: 0xEEE6DC })); tagString.position.set(-.33, .55, .1); tagString.rotation.z = .5; tea.add(tagString);
+  const teaTag = shadowy(new T.Mesh(new T.BoxGeometry(.16, .2, .01), clayMat(CLAY.butter))); teaTag.position.set(-.5, .3, .14); teaTag.rotation.z = .2; tea.add(teaTag);
+  const steam = [];
+  for (let i = 0; i < 3; i++) {
+    const pts = []; for (let k = 0; k <= 8; k++) pts.push(new T.Vector3(Math.sin(k * .9 + i * 2) * .07, k * .12, Math.cos(k * .7 + i) * .03));
+    const wisp = new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3(pts), 24, .028, 6, false), new T.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: .6, depthWrite: false }));
+    wisp.position.set((i - 1) * .13, .68, (i % 2) * .05); tea.add(wisp); steam.push(wisp);
+  }
+  tea.userData.info = { tea: true, kindLabel: "Hot tea", title: "Take a sip" };
+  anims.push((dt, t) => {
+    if (reduced) return false;
+    steam.forEach((w, i) => { const ph = ((t * .35 + i / 3) % 1); w.position.y = .66 + ph * .5; w.material.opacity = .55 * Math.sin(ph * Math.PI); w.rotation.y = t * .4 + i; });
+    rays.forEach((r, i) => { if (r.visible) r.material.opacity = (r.userData.base || 0) * (.8 + .2 * Math.sin(t * .5 + i * 2)); });
+    swaying.forEach(([o, amp, ph]) => { o.rotation.z = Math.sin(t * .8 + ph) * amp; o.rotation.x = Math.cos(t * .6 + ph) * amp * .6; });
+    return false;
+  });
+
+  // the room follows the real clock: dawn, day, golden hour, dusk, lamp-lit night
+  const C = (h) => new T.Color(h);
+  const NIGHT = { sky1: C(0x16204A), sky2: C(0x34406E), wall: C(0x34394A), hemiS: C(0x8D79B0), hemiG: C(0x2A1A22), hemiI: .45, sunC: C(0xA9B6FF), sunI: .3, fill: .1, lamp: 1.9, stars: 1, cloud: 0, motes: 0 };
+  const DAWN = { sky1: C(0x8DB6E0), sky2: C(0xFBD3B0), wall: C(0xE3E2CF), hemiS: C(0xFFE3E0), hemiG: C(0xC9A49A), hemiI: .45, sunC: C(0xFFC9A0), sunI: .45, fill: .1, lamp: .5, stars: .1, cloud: .6, motes: .6 };
+  const DAY = { sky1: C(0x3F8FD8), sky2: C(0xBFE3F4), wall: C(0xC5DDBE), hemiS: C(0xFFF1F6), hemiG: C(0xD9B8A8), hemiI: .45, sunC: C(0xFFF2E2), sunI: .68, fill: .12, lamp: 0, stars: 0, cloud: 1, motes: 1 };
+  const GOLDEN = { sky1: C(0x6F8FC8), sky2: C(0xF8C890), wall: C(0xE2D9C2), hemiS: C(0xFFDCC8), hemiG: C(0xC9A08A), hemiI: .45, sunC: C(0xFFB98A), sunI: .5, fill: .1, lamp: .7, stars: 0, cloud: .7, motes: .8 };
+  const DUSK = { sky1: C(0x6B5A93), sky2: C(0xE7A3A8), wall: C(0x77768E), hemiS: C(0xB49AC4), hemiG: C(0x4A3040), hemiI: .42, sunC: C(0xC8A8E0), sunI: .3, fill: .1, lamp: 1.6, stars: .5, cloud: .2, motes: 0 };
+  const KEYS = [[0, NIGHT], [5.5, NIGHT], [7, DAWN], [9.5, DAY], [16.5, DAY], [18.5, GOLDEN], [19.75, DUSK], [21, NIGHT], [24, NIGHT]];
+  let hourOverride = null;
+  const clockHour = () => { if (hourOverride != null) return hourOverride; const d = new Date(); return d.getHours() + d.getMinutes() / 60; };
+  function stateAt(h) {
+    let i = 0; while (i < KEYS.length - 2 && h >= KEYS[i + 1][0]) i++;
+    const [h0, a] = KEYS[i], [h1, b] = KEYS[i + 1]; const t = h1 > h0 ? Math.min(1, Math.max(0, (h - h0) / (h1 - h0))) : 0;
+    const out = {}; for (const k in a) out[k] = a[k] instanceof T.Color ? a[k].clone().lerp(b[k], t) : a[k] + (b[k] - a[k]) * t; return out;
+  }
+  function applyTime() {
+    const h = clockHour(); const st = stateAt(h);
+    drawWall(st.wall, 1 - st.stars); drawSky(st, h);
+    scene.background = st.wall.clone();
+    scene.fog = new T.Fog(st.wall.clone().lerp(new T.Color(0xFFF4E0), .3 * (1 - st.stars)), 22, 46);
+    const rayOn = Math.max(0, 1 - st.stars * 1.6) * (st.sunI / .68); rays.forEach((r, i) => { r.visible = rayOn > .05; r.material.opacity = .2 * rayOn; r.userData.base = .2 * rayOn; });
+    hemi.color.copy(st.hemiS); hemi.groundColor.copy(st.hemiG); hemi.intensity = st.hemiI;
+    sun.color.copy(st.sunC); sun.intensity = st.sunI; fill.intensity = st.fill;
+    const dp = Math.min(1, Math.max(0, (h - 6.5) / (20 - 6.5)));
+    if (st.stars < .6) sun.position.set(9 - dp * 16, 4 + Math.sin(dp * Math.PI) * 9, -1 + Math.sin(dp * Math.PI) * 3); else sun.position.set(4, 10, -2);
+    lampLight.intensity = st.lamp; const lampOn = st.lamp > .3; if (lampLight.castShadow !== lampOn) lampLight.castShadow = lampOn;
+    bulb.visible = st.lamp > .15; bulb.material.opacity = Math.min(.75, .25 + st.lamp * .2); capMat.emissiveIntensity = Math.min(.5, st.lamp * .2); motes.visible = st.motes > .05; motes.material.opacity = .55 * st.motes;
+    const hr2 = Math.floor(h);
+    $("greet").firstChild.textContent = hr2 < 5 ? hi("Night owl") : hr2 < 12 ? hi("Morning") : hr2 < 18 ? hi("Hi") : hi("Evening");
+    $("greet").querySelector("em").textContent = hr2 < 5 ? "the clay can wait" : hr2 < 12 ? "time to knead the day" : hr2 < 18 ? "tools back in hand" : "one last pinch?";
+  }
+  applyTime();
+  setInterval(applyTime, 60000);
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") applyTime(); });
+
+  // ---- paint palette, brushes and little paint pots ----
+  { const pal = new T.Group(); pal.position.set(2.5, 0, -.9); pal.rotation.y = .35; pal.scale.setScalar(1.3); scene.add(pal);
+    const sh = new T.Shape(); sh.moveTo(-1.15, 0); sh.bezierCurveTo(-1.2, .75, -.3, .95, .45, .8); sh.bezierCurveTo(1.25, .65, 1.4, -.1, .95, -.55); sh.bezierCurveTo(.5, -.95, -.1, -.6, -.45, -.7); sh.bezierCurveTo(-.95, -.8, -1.12, -.45, -1.15, 0);
+    const hole = new T.Path(); hole.absellipse(.72, -.12, .2, .15, 0, Math.PI * 2, true); sh.holes.push(hole);
+    const pg = new T.ExtrudeGeometry(sh, { depth: .07, bevelEnabled: true, bevelThickness: .025, bevelSize: .025, bevelSegments: 3, curveSegments: 20 }); pg.rotateX(-Math.PI / 2);
+    const board = shadowy(new T.Mesh(pg, clayMat(0xD9B98C))); board.position.y = .03; pal.add(board);
+    const paints = [0xC8405E, 0xE0733A, 0xE0A91E, 0x3E9A55, 0x3B7FC4, 0x8A63C9, 0xE9E0CF];
+    paints.forEach((c, i) => { const a = 2.75 - i * .42; const blob = shadowy(new T.Mesh(new T.SphereGeometry(.16 + rnd("paint", i) * .04, 16, 12), clayMat(c)));
+      blob.scale.set(1, .32, .85); blob.position.set(Math.cos(a) * .78 - .1, .13, -Math.sin(a) * .52 - .02); blob.rotation.y = rnd("paint", i + 9) * 3; pal.add(blob); });
+    // a mixed smear in the middle
+    [[0xD0688A, -.15, .05, .22], [0x9A6CC0, .1, .12, .16]].forEach(([c, x, z, r]) => { const sm = new T.Mesh(new T.SphereGeometry(r, 16, 10), clayMat(c)); sm.scale.set(1.3, .12, .8); sm.position.set(x, .12, z); sm.rotation.y = .6; sm.receiveShadow = true; pal.add(sm); });
+    // two brushes: one resting on the palette, one on the table
+    const brush = (x, z, rot, tip, lift) => { const b = new T.Group(); b.position.set(x, lift, z); b.rotation.y = rot; pal.add(b);
+      const h = shadowy(new T.Mesh(new T.CylinderGeometry(.035, .05, 1.5, 10), clayMat(0xE8B98A))); h.rotation.z = Math.PI / 2; b.add(h);
+      const fer = shadowy(new T.Mesh(new T.CylinderGeometry(.052, .052, .22, 10), toonMat({ color: 0xC9C4CC }))); fer.rotation.z = Math.PI / 2; fer.position.x = .82; b.add(fer);
+      const br = shadowy(new T.Mesh(new T.ConeGeometry(.07, .3, 10), clayMat(tip))); br.rotation.z = -Math.PI / 2; br.position.x = 1.06; b.add(br); };
+    brush(-.5, -.25, -.5, 0xC8405E, .17); brush(-.9, 1.25, .25, 0x3B7FC4, .06);
+    // paint pots
+    [[1.75, -.35, 0x8A63C9], [2.25, .2, 0x3E9A55], [1.8, .6, 0xE0A91E]].forEach(([x, z, c], i) => { const pot2 = new T.Group(); pot2.position.set(x, 0, z); pal.add(pot2);
+      const body = shadowy(new T.Mesh(new T.CylinderGeometry(.2, .18, .3, 20), clayMat(0xE4D8C6))); body.position.y = .15; pot2.add(body);
+      const top = new T.Mesh(new T.CircleGeometry(.17, 20), clayMat(c)); top.rotation.x = -Math.PI / 2; top.position.y = .305; pot2.add(top);
+      const band = new T.Mesh(new T.CylinderGeometry(.205, .2, .1, 20, 1, true), clayMat(c)); band.position.y = .14; pot2.add(band); });
+  }
+
+  cork.userData.info = { addNote: true, kindLabel: "Corkboard", title: "Pin a new sticky note" };
+  organicize(scene, new Set([table, wall, skirting, mat, jarGlass, jarBase, sky, cork]));
+
+  // ---- dynamic groups ----
+  const groups = { meetings: new T.Group(), notes: new T.Group(), lumps: new T.Group(), pieces: new T.Group(), pellets: new T.Group() };
+  Object.values(groups).forEach((g) => scene.add(g));
+  const picks = { meetings: [], notes: [], lumps: [], pieces: [] };
+  let tags = [];
+  // a notePad of sticky notes hanging beside the corkboard: click it to write a new note
+  const notePad = new T.Group(); notePad.position.set(1.78, 2.25, -5.0); notePad.rotation.z = -.06; scene.add(notePad);
+  [[0xCFEFDD, -.06, .05], [0xFBD0DC, -.03, .1], [0xFBE9A8, 0, .15]].forEach(([c, off, z], i) => { const sheet = shadowy(new T.Mesh(softBox(.95, .95, .07, "pad" + i), clayMat(c))); sheet.position.set(off, off, z); sheet.rotation.z = off; notePad.add(sheet); });
+  { const face = new T.Mesh(new T.PlaneGeometry(.8, .8), toonMat({ transparent: true, map: canvasTex(160, 160, (x, w, h) => { x.clearRect(0, 0, w, h); x.strokeStyle = "#4A2C3D"; x.lineWidth = 9; x.lineCap = "round";
+      x.beginPath(); x.moveTo(80, 38); x.lineTo(80, 92); x.moveTo(53, 65); x.lineTo(107, 65); x.stroke(); x.fillStyle = "#4A2C3D"; x.font = "400 30px 'Patrick Hand', cursive"; x.textAlign = "center"; x.fillText("new note", 80, 136); }) }));
+    face.position.z = .2; notePad.add(face);
+    const pin = shadowy(new T.Mesh(new T.SphereGeometry(.08, 14, 10), clayMat(CLAY.rose))); pin.position.set(0, .4, .22); notePad.add(pin); }
+  notePad.userData.info = { addNote: true, kindLabel: "Sticky notes", title: "Write a new sticky note" };
+  // tear-off wall calendar: the last "market day" (production deploy)
+  const marketCal = new T.Group(); marketCal.position.set(1.78, 4.6, -5.0); marketCal.rotation.z = .02; marketCal.scale.setScalar(1.3); scene.add(marketCal);
+  marketCal.add(shadowy(new T.Mesh(softBox(1.45, 1.95, .1, "cal"), clayMat(0xF7F1E8))));
+  const calCanvas = document.createElement("canvas"); calCanvas.width = 290; calCanvas.height = 390;
+  const calMap = new T.CanvasTexture(calCanvas); calMap.encoding = T.sRGBEncoding; calMap.anisotropy = maxAniso;
+  { const face = new T.Mesh(new T.PlaneGeometry(1.3, 1.75), toonMat({ map: calMap })); face.position.z = .09; marketCal.add(face);
+    [-.35, .35].forEach((x) => { const ring = new T.Mesh(new T.TorusGeometry(.07, .02, 8, 16), toonMat({ color: 0xB9B1C0 })); ring.position.set(x, .93, .08); marketCal.add(ring); });
+    const nail = shadowy(new T.Mesh(new T.SphereGeometry(.05, 10, 8), clayMat(CLAY.rose))); nail.position.set(0, 1.08, .06); marketCal.add(nail); }
+  function drawMarketCal() {
+    const x = calCanvas.getContext("2d"), w = 290, h = 390; const tag = S.data.prs?.lastProductionDeploy; const waiting = (S.data.prs?.awaitingDeploy || []).length;
+    const m = tag && tag.match(/^production-(\d{4})(\d\d)(\d\d)T(\d\d)(\d\d)Z(-hotfix)?$/); const d = m ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5])) : null;
+    // the market cart leaves once every weekday, at about the same time as the last regular run
+    let next = null;
+    if (d) { next = new Date(); next.setUTCHours(m[6] ? 9 : +m[4], m[6] ? 0 : +m[5], 0, 0);
+      while (next.getTime() <= Date.now() || next.getTime() <= d.getTime() + 3600000 || [0, 6].includes(next.getDay())) next.setUTCDate(next.getUTCDate() + 1); }
+    const dayWord = (dt) => { const days = Math.round((new Date(dt).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / 86400000);
+      return days === 0 ? "today" : days === -1 ? "yesterday" : days === 1 ? "tomorrow" : days < 0 ? `${-days} days ago` : dt.toLocaleDateString(undefined, { weekday: "long" }); };
+    const short = (dt) => dt.toLocaleDateString(undefined, { weekday: "short" }) + " " + dt.getDate();
+    x.fillStyle = "#FFFDF8"; x.fillRect(0, 0, w, h); x.textAlign = "center";
+    x.fillStyle = "#E2869C"; x.fillRect(0, 0, w, 56); x.fillStyle = "#FFFDF8"; x.font = "700 27px Fredoka, sans-serif"; x.fillText("MARKET DAYS", w / 2, 38);
+    x.fillStyle = "#C8405E"; x.font = "700 22px Fredoka, sans-serif"; x.fillText("LAST", w / 2, 88);
+    x.fillStyle = "#4A2C3D"; x.font = "700 68px Fredoka, sans-serif"; x.fillText(d ? short(d) : "?", w / 2, 150);
+    x.fillStyle = "#8A6578"; x.font = "400 32px 'Patrick Hand', cursive"; x.fillText(d ? `${dayWord(d)} · ${hm(d)}${m[6] ? " · rush" : ""}` : "no news yet", w / 2, 188);
+    x.strokeStyle = "rgba(138,101,120,.4)"; x.lineWidth = 2; x.setLineDash([7, 7]); x.beginPath(); x.moveTo(18, 208); x.lineTo(w - 18, 208); x.stroke(); x.setLineDash([]);
+    if (next) { x.fillStyle = "#8A63C9"; x.font = "700 22px Fredoka, sans-serif"; x.fillText("NEXT", w / 2, 242);
+      x.fillStyle = "#4A2C3D"; x.font = "700 68px Fredoka, sans-serif"; x.fillText(short(next), w / 2, 304);
+      x.fillStyle = "#8A6578"; x.font = "400 32px 'Patrick Hand', cursive"; x.fillText(`${dayWord(next)} · about ${hm(next)}`, w / 2, 340); }
+    x.fillStyle = waiting ? "#C8405E" : "#3E9A55"; x.font = "400 27px 'Patrick Hand', cursive";
+    x.fillText(!d ? "" : waiting ? `${waiting} piece${waiting === 1 ? "" : "s"} packed` : "all pieces sold", w / 2, 376);
+    calMap.needsUpdate = true;
+    marketCal.userData.info = { key: "calendar", noDone: true, kindLabel: "Market calendar", href: CFG.deployDashboardUrl || null, goLabel: "Open delivery status", title: d ? `Last production deploy: ${d.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })} at ${hm(d)}` : "No deploy news yet",
+      meta: d ? [[tag, "soft"], waiting ? [`${waiting} merged, waiting for the next deploy`, "warn"] : ["Nothing waiting", "ok"]] : [],
+      text: [next ? `Next deploy, my estimate: ${dayWord(next)} around ${hm(next)}. Production deploys run once each weekday at about this time; this is a guess from the last run, not a schedule I can read.` : "", (S.data.prs?.awaitingDeploy || []).map((p) => `#${p.number} ${p.title}`).join("\n")].filter(Boolean).join("\n\n") };
+  }
+  drawMarketCal();
+  function clearGroup(name) {
+    const g = groups[name];
+    g.traverse((o) => { if (o.geometry) o.geometry.dispose(); const ms = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : []; ms.forEach((m) => { if (m.userData?.shared) return; if (m.map) m.map.dispose(); m.dispose(); }); });
+    while (g.children.length) g.remove(g.children[0]);
+    if (picks[name]) picks[name] = [];
+    tags = tags.filter((t) => { if (t.group === name) { t.el.remove(); return false; } return true; });
+    if (hovered && hovered.parent === null) setHover(null);
+  }
+  function addTag(group, obj, text, cls, lift) { const e = el("div", "tag3d" + (cls ? " " + cls : ""), text); $("tags").appendChild(e); tags.push({ group, obj, el: e, lift }); }
+
+  function roundedRect(w, h, r) { const s = new T.Shape(); s.moveTo(-w / 2 + r, -h / 2); s.lineTo(w / 2 - r, -h / 2); s.quadraticCurveTo(w / 2, -h / 2, w / 2, -h / 2 + r); s.lineTo(w / 2, h / 2 - r); s.quadraticCurveTo(w / 2, h / 2, w / 2 - r, h / 2); s.lineTo(-w / 2 + r, h / 2); s.quadraticCurveTo(-w / 2, h / 2, -w / 2, h / 2 - r); s.lineTo(-w / 2, -h / 2 + r); s.quadraticCurveTo(-w / 2, -h / 2, -w / 2 + r, -h / 2); return s; }
+
+  // a soft, hand-pinched lump: displaced sphere, flattened where it sits on the table, with a thumbprint dent
+  function lumpGeometry(seed, flat = .72) {
+    const g = new T.SphereGeometry(1, 56, 40); const p = g.attributes.position; const v = new T.Vector3();
+    const a = rnd(seed, 1) * 6, b = rnd(seed, 2) * 6, c = rnd(seed, 3) * 6;
+    const dent = new T.Vector3(rnd(seed, 4) - .5, .7, rnd(seed, 5) * .6).normalize();
+    for (let i = 0; i < p.count; i++) {
+      v.fromBufferAttribute(p, i); const n = v.clone().normalize();
+      let d = 1 + .09 * Math.sin(3 * n.x + a) * Math.sin(2.5 * n.y + b) + .06 * Math.sin(5 * n.z + c + n.x * 2) + .03 * Math.sin(9 * n.y + a);
+      d -= .13 * Math.exp(-n.distanceToSquared(dent) / .05);
+      v.copy(n).multiplyScalar(d); v.y *= flat; if (v.y < -.38) v.y = -.38 + (v.y + .38) * .15;
+      p.setXYZ(i, v.x, v.y, v.z);
+    }
+    g.computeVertexNormals(); g.translate(0, .38 + .0, 0); return g;
+  }
+  const faceRay = new T.Raycaster();
+  function addFace(lump, mood) {
+    const at = (x, y) => { faceRay.set(new T.Vector3(x, y, 4), new T.Vector3(0, 0, -1)); const h = faceRay.intersectObject(lump, false)[0]; return h ? h.point : new T.Vector3(x, y, .9); };
+    const black = new T.MeshBasicMaterial({ color: INK });
+    [-1, 1].forEach((sx) => {
+      const p = at(sx * .24, .78);
+      if (mood === "awake") { const e = new T.Mesh(new T.SphereGeometry(.085, 14, 10), black); e.position.copy(p); lump.add(e);
+        const shine = new T.Mesh(new T.SphereGeometry(.03, 8, 6), new T.MeshBasicMaterial({ color: 0xffffff })); shine.position.set(p.x + .03, p.y + .03, p.z + .07); lump.add(shine); }
+      else { const e = new T.Mesh(new T.TorusGeometry(.08, .022, 6, 14, Math.PI), black); e.position.copy(p); e.position.z += .01; if (mood === "sleepy") e.rotation.z = Math.PI; lump.add(e); }
+      const b = at(sx * .44, .6); const blush = new T.Mesh(new T.CircleGeometry(.1, 16), new T.MeshBasicMaterial({ color: 0xF29BB2, transparent: true, opacity: .8 })); blush.position.copy(b); blush.position.z += .02; lump.add(blush);
+    });
+    if (mood !== "sleepy") { const m = at(0, .6); const sm = new T.Mesh(new T.TorusGeometry(.09, .022, 6, 14, Math.PI), black); sm.position.copy(m); sm.position.z += .01; sm.rotation.z = Math.PI; lump.add(sm); }
+  }
+  function vaseGeometry(seed) {
+    const r0 = .2 + rnd(seed, 1) * .08, belly = .27 + rnd(seed, 2) * .12, neck = .1 + rnd(seed, 3) * .08, lip = neck + .03 + rnd(seed, 4) * .07, h = .75 + rnd(seed, 5) * .55;
+    const pts = [new T.Vector2(0, 0), new T.Vector2(r0, 0), new T.Vector2(belly, h * .35), new T.Vector2(belly * .92, h * .55), new T.Vector2(neck, h * .82), new T.Vector2(lip, h), new T.Vector2(lip - .04, h - .02), new T.Vector2(neck - .03, h * .82)];
+    const g = new T.LatheGeometry(new T.SplineCurve(pts.slice(0, 6)).getPoints(28).concat(pts.slice(6)), 40); g.computeVertexNormals(); return g;
+  }
+
+  // ---- meetings: slabs on the work board ----
+  function slabTexture(time, title, rsvp) {
+    return canvasTex(256, 192, (x, w, h) => {
+      x.clearRect(0, 0, w, h);
+      x.fillStyle = "rgba(74,44,61,.75)"; x.font = "700 56px Fredoka, sans-serif"; x.fillText(time, 18, 66);
+      x.fillStyle = "rgba(74,44,61,.9)"; x.font = "800 23px Nunito, sans-serif";
+      wrapLines(x, title, w - 32, 3).forEach((l, i) => x.fillText(l, 18, 104 + i * 27));
+      if (rsvp === "needsAction") { x.fillStyle = "#EE7D96"; x.beginPath(); x.arc(w - 26, 30, 11, 0, Math.PI * 2); x.fill(); }
+    });
+  }
+  function renderMeetings() {
+    clearGroup("meetings");
+    const evs = S.data.meetings || []; const t = Date.now(); const done = doneEver();
+    $("c-kiln") && ($("c-kiln").textContent = "");
+    const n = Math.max(evs.length, 1); const span = 7.8; const step = Math.min(1.5, span / n); const x0 = -3.3 - (step * (evs.length - 1)) / 2;
+    let needleAt = null;
+    evs.forEach((e, i) => {
+      const key = `meeting:${e.id}`; const g = new T.Group();
+      const past = t >= e.end, nowOn = t >= e.start && t < e.end;
+      const color = e.reminder ? CLAY.butter : e.rsvp === "needsAction" ? CLAY.pink : CLAY[clayFor(key) === "butter" ? "peach" : clayFor(key)];
+      const geo = new T.ExtrudeGeometry(roundedRect(Math.min(1.3, step * .88), 1.05, .22), { depth: .14, bevelEnabled: true, bevelThickness: .06, bevelSize: .06, bevelSegments: 4, curveSegments: 8 });
+      geo.rotateX(-Math.PI / 2); wobble(geo, .035, key, 2.4);
+      const m = clayMat(color, .9); if (past || e.rsvp === "declined" || done.has(key)) { m.color.lerp(new T.Color(0xEDE3E6), .5); }
+      const slab = shadowy(new T.Mesh(geo, m)); g.add(slab);
+      const lbl = new T.Mesh(new T.PlaneGeometry(Math.min(1.3, step * .88) * .96, .78), toonMat({ map: slabTexture(hm(e.start), e.title, e.rsvp), transparent: true, roughness: .9, depthWrite: false }));
+      lbl.rotation.x = -Math.PI / 2; lbl.position.y = .21; g.add(lbl);
+      if (done.has(key)) { const dot = shadowy(new T.Mesh(new T.SphereGeometry(.12, 16, 12), clayMat(CLAY.mint))); dot.scale.y = .6; dot.position.set(.4, .3, .35); g.add(dot); }
+      if (e.rsvp === "needsAction") { const stick = shadowy(new T.Mesh(new T.CylinderGeometry(.02, .02, .7, 6), clayMat(0xB8A9B0))); stick.position.set(.45, .55, -.35); g.add(stick);
+        const flag = new T.Mesh(new T.PlaneGeometry(.3, .2), toonMat({ color: CLAY.rose, side: T.DoubleSide })); flag.position.set(.6, .8, -.35); g.add(flag); }
+      g.position.set(x0 + i * step, .16 + (nowOn ? .12 : 0), -3.4 + (rnd(key, 2) - .5) * .25);
+      g.rotation.y = (rnd(key, 3) - .5) * .18;
+      if (nowOn) g.userData.float = true;
+      const mins = Math.round((e.start - t) / 60000);
+      g.userData.info = { key, kind: "meeting", kindLabel: "Meeting", title: e.title, href: e.join && safeUrl(e.join) ? e.join : e.link, goLabel: e.join ? "Join call" : "Open in Calendar",
+        meta: [[`${hm(e.start)} – ${hm(e.end)}`], e.rsvp === "needsAction" ? ["RSVP needed", "warn"] : e.rsvp === "declined" ? ["Declined", "soft"] : e.rsvp === "tentative" ? ["Maybe", "soft"] : null,
+          nowOn ? ["Happening now", "warn"] : null, mins > 0 && mins <= 30 ? [`in ${mins} min`, "bad"] : null, e.reminder ? ["Your reminder", "soft"] : null, e.people ? [`${e.people} people`] : null],
+        text: e.location ? `Where: ${e.location}` : "" };
+      groups.meetings.add(g); picks.meetings.push(g);
+      if (needleAt === null && e.start.getTime() > t) needleAt = x0 + (i - .5) * step;
+    });
+    if (evs.length) {
+      const nx = needleAt ?? x0 + (evs.length - .5) * step;
+      const needle = new T.Group(); needle.position.set(nx, .2, -3.4); needle.rotation.y = Math.PI / 2 + .1;
+      const shaft = shadowy(new T.Mesh(new T.CylinderGeometry(.02, .02, 2.2, 8), toonMat({ color: 0xD7D2DA, metalness: .8, roughness: .25 }))); shaft.rotation.z = Math.PI / 2; needle.add(shaft);
+      const handle = shadowy(new T.Mesh(new T.CylinderGeometry(.08, .08, .9, 12), clayMat(CLAY.rose, .5))); handle.rotation.z = Math.PI / 2; handle.position.x = -1.4; needle.add(handle);
+      groups.meetings.add(needle);
+      addTag("meetings", needle, `now ${hm(new Date())}`, "turn", .5);
+    }
+    rebuildA11y();
+  }
+
+  // ---- slack: paper notes pinned to the corkboard ----
+  function noteTexture(m, done) {
+    return canvasTex(320, 300, (x, w, h) => {
+      const tint = m.mine ? (STICKY[m.color] || STICKY.butter) : { now: "#FBDDE5", today: "#FBF0D2", whenever: "#DFF3E9" }[m.urgency] || "#FFFDF8";
+      x.fillStyle = tint; x.fillRect(0, 0, w, h);
+      x.fillStyle = "rgba(0,0,0,.04)"; x.fillRect(0, h - 26, w, 26);
+      x.fillStyle = "#4A2C3D"; x.font = "400 33px 'Patrick Hand', cursive";
+      const lines = wrapLines(x, m.ask || m.summary, w - 40, 4); lines.forEach((l, i) => x.fillText(l, 20, 70 + i * 40));
+      if (done) { x.strokeStyle = "#EE7D96"; x.lineWidth = 4; lines.forEach((l, i) => { const lw = x.measureText(l).width; x.beginPath(); x.moveTo(18, 58 + i * 40); x.lineTo(22 + lw, 56 + i * 40); x.stroke(); }); }
+      x.fillStyle = "#8A6578"; x.font = "800 19px Nunito, sans-serif"; x.fillText(m.mine ? "note to self" : `${m.who || "Someone"} · ${m.where || ""}`.slice(0, 30), 20, h - 18);
+    });
+  }
+  function renderSlack() {
+    clearGroup("notes");
+    const done = doneEver();
+    const mine = S.myNotes.filter((n) => !n.doneAt).slice(0, 6).map((n) => ({ mine: true, id: n.id, ask: n.text, color: n.color, createdAt: n.createdAt }));
+    const items = [...mine, ...(S.data.slack || []).filter((m) => !slackDone(done, m))].slice(0, 8);
+    items.forEach((m, i) => {
+      const key = m.mine ? `note:${m.id}` : slackThreadKey(m.permalink); const isDone = false;
+      const g = new T.Group();
+      const paper = new T.Mesh(curlPaper(new T.PlaneGeometry(1.62, 1.5, 10, 10), key), toonMat({ map: noteTexture(m, isDone), roughness: .95, transparent: isDone, opacity: isDone ? .55 : 1 }));
+      paper.castShadow = true; g.add(paper);
+      const pin = shadowy(new T.Mesh(new T.SphereGeometry(.09, 16, 12), clayMat(m.mine ? CLAY.lilac : { now: CLAY.rose, today: CLAY.butter, whenever: CLAY.mint }[m.urgency] || CLAY.rose, .4))); pin.position.set(0, .6, .08); g.add(pin);
+      const col = i % 4, row = Math.floor(i / 4);
+      g.position.set(-6.55 + col * 1.95, 3.95 - row * 1.85, -4.9 + i * .002);
+      g.rotation.z = (rnd(key, 1) - .5) * (isDone ? .5 : .16);
+      if (m.mine) g.userData.info = { key, kind: "note", kindLabel: "Your sticky note", title: m.ask, goLabel: "Throw it away", onGo: () => throwNote(m.id),
+        meta: [["Note to self", "soft"], m.createdAt ? [`pinned ${ago(m.createdAt)}`] : null] };
+      else g.userData.info = { key, kind: "slack", kindLabel: "Slack note", title: m.ask || m.summary, href: m.permalink, goLabel: "Open in Slack",
+        meta: [[m.urgency === "now" ? "Now" : m.urgency === "today" ? "Today" : "Whenever", m.urgency === "now" ? "bad" : m.urgency === "today" ? "warn" : "ok"], [`${m.who || "Someone"} · ${m.where || ""}`], m.time ? [String(m.time).replace(/:\d\d (CET|CEST)$/, "")] : null],
+        text: m.ask ? m.summary : "" };
+      groups.notes.add(g); picks.notes.push(g);
+    });
+    rebuildA11y();
+  }
+
+  // ---- claude sessions: lumps on the cutting mat ----
+  function renderSessions() {
+    clearGroup("lumps");
+    const done = doneEver(); const ss = (S.data.sessions || []).filter((s) => !/Clay Studio|Daily dashboard app/i.test(s.title) && !done.has(`session:${s.id}`)).slice(0, 8);
+    if (!ss.length) { rebuildA11y(); return; }
+    const newest = Math.max(...ss.map((s) => new Date(s.updatedAt).getTime()));
+    ss.forEach((s, i) => {
+      const key = `session:${s.id}`; const isDone = false;
+      const age = (newest - new Date(s.updatedAt).getTime()) / 86400000;
+      const g = new T.Group();
+      const color = new T.Color(s.yourTurn ? CLAY.butter : CLAY[clayFor(s.id) === "butter" ? "lilac" : clayFor(s.id)]);
+      if (isDone) color.lerp(new T.Color(0xFFFDF8), .55);
+      const lump = shadowy(new T.Mesh(lumpGeometry(s.id), clayMat(color.getHex())), true, true, .024); g.add(lump);
+      addFace(lump, s.yourTurn && !isDone ? "awake" : isDone ? "happy" : "sleepy");
+      const sc = .62 - Math.min(age, 4) * .05; g.scale.setScalar(sc);
+      if (s.yourTurn && !isDone) {
+        const tool = new T.Group(); tool.position.set(.25, .9, .1); tool.rotation.z = -.55;
+        const shaft = shadowy(new T.Mesh(new T.CylinderGeometry(.05, .05, 1.4, 10), clayMat(CLAY.rose, .5))); shaft.position.y = .7; tool.add(shaft);
+        const tip = shadowy(new T.Mesh(new T.SphereGeometry(.09, 12, 10), toonMat({ color: 0xD7D2DA, metalness: .8, roughness: .25 }))); tool.add(tip);
+        g.add(tool); g.userData.tool = tool;
+      }
+      const col = i % 4, row = Math.floor(i / 4);
+      g.position.set(-6.3 + col * 1.85 + (rnd(s.id, 7) - .5) * .3, .03, -.3 + row * 1.7 + (rnd(s.id, 8) - .5) * .3);
+      g.rotation.y = (rnd(s.id, 9) - .5) * .7;
+      g.userData.baseScale = sc; g.userData.breathe = s.yourTurn && !isDone;
+      g.userData.info = { key, kind: "session", kindLabel: "Claude session", title: s.title || "Untitled session", cmuxTitle: s.cmux?.title || null, cmuxName: s.cmux?.name || null,
+        goLabel: s.cmux ? "Open in cmux" : "Open session", onGo: s.cmux ? () => openSession({ cmuxTitle: s.cmux.title, cmuxName: s.cmux.name || undefined }) : s.desktopId ? () => openSession({ sessionId: s.desktopId }) : null,
+        copy: s.cmux || s.desktopId ? null : { label: "Copy resume command", text: `cd ${s.project || "~"} && claude --resume ${s.id}` },
+        meta: [s.yourTurn ? ["Your turn", "warn"] : s.cmux?.status === "Running" ? ["Claude is working", "ok"] : ["Nothing pending", "soft"], s.cmux ? ["in cmux", "soft"] : null, ...(s.prs || []).slice(0, 3).map((n) => [`#${n}`, "soft"]), s.branch && s.branch !== "main" ? [s.branch] : null, [ago(s.updatedAt)]],
+        text: s.whereItStopped ? `Where Claude stopped:\n${s.whereItStopped}` : "", more: s.lastAsk ? `You last asked: ${s.lastAsk}` : "" };
+      groups.lumps.add(g); picks.lumps.push(g);
+      addTag("lumps", g, (s.title || "Untitled").slice(0, 34), s.yourTurn && !isDone ? "turn" : isDone ? "dim" : "", 1.15);
+    });
+    rebuildA11y();
+  }
+
+  // ---- PRs: pieces on the drying rack ----
+  function crackTexture() {
+    return canvasTex(128, 128, (x, w, h) => { x.fillStyle = "#fff"; x.fillRect(0, 0, w, h); x.strokeStyle = "#5A3446"; x.lineWidth = 3; x.lineCap = "round";
+      x.beginPath(); x.moveTo(60, 0); x.lineTo(70, 30); x.lineTo(55, 55); x.lineTo(72, 80); x.lineTo(60, 128); x.moveTo(55, 55); x.lineTo(35, 64); x.stroke(); });
+  }
+  // a finished, painted piece: its clay colour with white polka dots and a band
+  function paintTexture(hex, bandHex) {
+    return canvasTex(256, 256, (x, w, h) => {
+      x.fillStyle = "#" + new T.Color(hex).getHexString(); x.fillRect(0, 0, w, h);
+      x.fillStyle = "#" + new T.Color(bandHex).getHexString(); x.fillRect(0, h * .52, w, h * .1);
+      x.fillStyle = "rgba(255,255,255,.85)"; for (let r = 0; r < 4; r++) for (let c = 0; c < 8; c++) { x.beginPath(); x.arc(c * 32 + (r % 2) * 16 + 8, 20 + r * 30, 6, 0, Math.PI * 2); x.fill(); }
+    });
+  }
+  function renderPrs() {
+    clearGroup("pieces"); drawMarketCal();
+    const { mine = [], toReview = [], awaitingDeploy = [], lastProductionDeploy } = S.data.prs || {}; const done = doneEver();
+    const rank = (p) => (p.ci?.state === "failing" ? 0 : 2) + (p.review === "CHANGES_REQUESTED" ? -1 : 0) + (p.mergeable === "CONFLICTING" ? -1 : 0);
+    const place = (p, key, pos, opts) => {
+      const g = new T.Group(); const ci = p.ci?.state; let m;
+      if (opts.painted) { m = toonMat({ color: 0xffffff }); m.map = paintTexture(CLAY[opts.color], CLAY[opts.band || "rose"]); }
+      else {
+        const base = new T.Color(CLAY[opts.color]);
+        if (ci === "running") base.lerp(new T.Color(CLAY.wet), .55);            // wet clay is darker
+        if (ci === "green") base.lerp(new T.Color(0xFFFDF8), .35);              // bone dry turns pale
+        m = toonMat({ color: base });
+        if (ci === "failing") { m.map = crackTexture(); m.map.encoding = T.sRGBEncoding; }
+      }
+      const vase = shadowy(new T.Mesh(wobble(vaseGeometry(String(p.number)), .028, key, 3.2), m)); g.add(vase);
+      if (opts.painted) { const gl = new T.Mesh(new T.CircleGeometry(.06, 12), new T.MeshBasicMaterial({ color: 0xffffff })); gl.scale.set(.6, 1.8, 1); gl.position.set(-.12, .45, .33); g.add(gl); }
+      if (p.review === "APPROVED" || p.review === "CHANGES_REQUESTED") {
+        const st = new T.Mesh(new T.CircleGeometry(.08, 20), toonMat({ color: p.review === "APPROVED" ? CLAY.butter : CLAY.rose }));
+        st.position.set(0, .35, .32); g.add(st);
+      }
+      g.position.copy(pos); g.rotation.y = opts.painted ? (rnd(key, 2) - .5) * .6 : rnd(key, 2) * Math.PI;
+      g.userData.info = opts.info;
+      groups.pieces.add(g); picks.pieces.push(g);
+      addTag("pieces", g, opts.painted ? `#${p.number} ✓` : `#${p.number}`, ci === "failing" ? "turn" : "", opts.lift);
+    };
+    // being shaped: open PRs sit on the cutting mat, front row
+    [...mine].sort((a, b) => rank(a) - rank(b)).filter((p) => !done.has(`pr:${p.number}`)).slice(0, 7).forEach((p, i) => {
+      const key = `pr:${p.number}`; const ci = p.ci?.state;
+      place(p, key, new T.Vector3(-6.1 + i * 1.0, .03, 3.25 + (rnd(key, 1) - .5) * .25), { color: clayFor(String(p.number)), lift: 1.45, info: {
+        key, kind: "pr", kindLabel: "Pull request · still being shaped", title: p.title, href: p.url, goLabel: "Open on GitHub",
+        meta: [ci === "failing" ? [`Cracked · ${p.ci.fail} failing`, "bad"] : ci === "running" ? ["Still wet · CI running", "warn"] : ci === "green" ? ["Bone dry · CI green", "ok"] : ["No CI", "soft"],
+          p.review === "APPROVED" ? ["Approved", "ok"] : p.review === "CHANGES_REQUESTED" ? ["Changes asked", "bad"] : ["Needs review", "soft"],
+          p.draft ? ["Draft", "soft"] : null, p.mergeable === "CONFLICTING" ? ["Conflicts", "bad"] : null, [`#${p.number} · ${ago(p.updatedAt)}`]],
+        text: p.ci?.failing?.length ? `Failing checks:\n${p.ci.failing.join("\n")}` : "" } });
+    });
+    // finished: merged PRs drying on the rack until the next production deploy
+    const bands = ["rose", "mint", "lilac", "butter"];
+    awaitingDeploy.slice(0, 14).forEach((p, i) => {
+      const key = `shipped:${p.number}`;
+      place(p, key, new T.Vector3(RACK.x - RACK.w / 2 + .45 + (i % 7) * .66, (i < 7 ? RACK.shelves[2] : RACK.shelves[1]) + .04, RACK.z + (rnd(key, 1) - .5) * .4),
+        { painted: true, color: clayFor(String(p.number)), band: bands[i % 4], lift: 1.4 + (i % 2) * .45, info: {
+          key, noDone: true, kindLabel: "Finished · drying until deploy", title: p.title, href: p.url, goLabel: "Open on GitHub",
+          meta: [["Merged", "ok"], [`merged ${ago(p.mergedAt)}`], ["Waiting for production deploy", "warn"]],
+          more: lastProductionDeploy ? `Last production deploy: ${lastProductionDeploy.replace("production-", "").replace(/^(\d{4})(\d\d)(\d\d)T(\d\d)(\d\d)Z$/, "$3/$2 $4:$5 UTC")}` : "" } });
+    });
+    toReview.filter((p) => !done.has(`review:${p.url}`)).slice(0, 7).forEach((p, i) => {
+      const key = `review:${p.url}`;
+      place(p, key, new T.Vector3(RACK.x - RACK.w / 2 + .45 + i * .66, RACK.shelves[0] + .04, RACK.z + (rnd(key, 1) - .5) * .4), { color: "peach", lift: 1.4 + (i % 2) * .45,
+        info: { key, kind: "pr", kindLabel: "Review asked of you", title: p.title, href: p.url, goLabel: "Review on GitHub",
+          meta: [["Review asked", "warn"], [`${p.repo || ""}#${p.number}`], [`by ${p.author || "someone"}`], [ago(p.updatedAt)]] } });
+    });
+    rebuildA11y();
+  }
+
+  // ---- sketchbook pages ----
+  function pageTexture(items, start, title) {
+    return canvasTex(512, 680, (x, w, h) => {
+      x.fillStyle = "#FFFDF8"; x.fillRect(0, 0, w, h);
+      x.strokeStyle = "rgba(120,150,210,.3)"; x.lineWidth = 2; for (let y = 120; y < h; y += 58) { x.beginPath(); x.moveTo(20, y); x.lineTo(w - 20, y); x.stroke(); }
+      if (title) { x.fillStyle = "#EE7D96"; x.font = "400 52px 'Patrick Hand', cursive"; x.fillText(title, 36, 84); }
+      const done = doneEver();
+      items.forEach((s, i) => {
+        const y = 110 + (i + 1) * 58 - 12; const isDone = done.has(`sketch:${s.id}`);
+        x.strokeStyle = "#5B4A63"; x.lineWidth = 3; x.strokeRect(36, y - 30, 28, 28);
+        x.fillStyle = isDone ? "rgba(91,74,99,.5)" : "#5B4A63"; x.font = "400 36px 'Patrick Hand', cursive";
+        const t = wrapLines(x, s.title, w - 120, 1)[0] || ""; x.fillText(t, 80, y);
+        if (isDone) { x.strokeStyle = "#EE7D96"; x.beginPath(); x.moveTo(78, y - 14); x.lineTo(84 + x.measureText(t).width, y - 16); x.stroke(); x.fillStyle = "#EE7D96"; x.font = "400 33px 'Patrick Hand', cursive"; x.fillText("✓", 38, y - 2); }
+      });
+      if (!items.length && start === 0) { x.fillStyle = "#A592A8"; x.font = "400 33px 'Patrick Hand', cursive"; x.fillText("empty page…", 40, 220); x.fillText("tap to add an idea", 40, 278); }
+    });
+  }
+  function renderBookPages() {
+    const items = S.sketch;
+    const setTex = (mesh, tex) => { const m = mesh.material[2]; if (m.map) m.map.dispose(); m.map = tex; m.needsUpdate = true; };
+    setTex(pageL, pageTexture(items.slice(0, 8), 0, "Ideas & docs"));
+    setTex(pageR, pageTexture(items.slice(8, 18), 8, ""));
+  }
+  bookGroup.userData.info = { book: true, kindLabel: "Sketchbook", title: "Open your sketchbook" };
+
+  // ---- jar ----
+  function renderJar() {
+    clearGroup("pellets");
+    const n = Math.min((S.progress.days?.[dayKey()] || []).length, 40);
+    for (let i = 0; i < n; i++) {
+      const p = shadowy(new T.Mesh(new T.SphereGeometry(.14, 14, 10), clayMat(CLAY[CLAY_KEYS[i % 5]], .85)));
+      const layer = Math.floor(i / 7), a = (i % 7) / 7 * Math.PI * 2 + layer;
+      const r = i % 7 === 6 ? 0 : .32;
+      p.position.set(JAR.x + Math.cos(a) * r, .16 + layer * .22, JAR.z + Math.sin(a) * r); p.scale.y = .8;
+      groups.pellets.add(p);
+    }
+    if (jarLabel) { scene.remove(jarLabel); jarLabel.geometry.dispose(); jarLabel.material.map.dispose(); jarLabel.material.dispose(); }
+    const pts = S.progress.points || 0;
+    jarLabel = new T.Mesh(new T.CylinderGeometry(.635, .6, .5, 32, 1, true, -.7, 1.4), toonMat({ roughness: .9, transparent: true,
+      map: canvasTex(256, 96, (x, w, h) => { x.fillStyle = "rgba(255,224,138,.95)"; x.fillRect(0, 0, w, h); x.fillStyle = "#4A2C3D"; x.font = "400 43px 'Patrick Hand', cursive"; x.textAlign = "center"; x.fillText(`${pts} pts`, w / 2, 64); }) }));
+    jarLabel.position.set(JAR.x, .9, JAR.z); jarLabel.rotation.y = -.55; scene.add(jarLabel);
+  }
+
+  // ---- camera, picking, loop ----
+  const VIEWS = { seat: { pos: new T.Vector3(0, 8.4, 13.2), look: new T.Vector3(0, 1.7, -1) } };
+  const view = "seat"; const camPos = VIEWS.seat.pos.clone(); const camLook = VIEWS.seat.look.clone();
+  const pointer = { x: 0, y: 0 };
+
+  function resize() {
+    const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+  }
+  addEventListener("resize", resize); resize();
+
+  const ray = new T.Raycaster(); const ndc = new T.Vector2();
+  let hovered = null;
+  function rootOf(o) { while (o && !o.userData.info) o = o.parent; return o; }
+  function pickAt(cx, cy) {
+    ndc.set((cx / innerWidth) * 2 - 1, -(cy / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera);
+    const roots = [...picks.meetings, ...picks.notes, ...picks.lumps, ...picks.pieces, bookGroup, pinGroup, jarGlass, tea, cork, notePad, marketCal, sponge];
+    const hit = ray.intersectObjects(roots, true)[0];
+    return hit ? rootOf(hit.object) : null;
+  }
+  function setHover(root, cx, cy) {
+    if (hovered && hovered !== root) hovered.traverse((o) => { if (o.userData.outline) o.material = outlineMat(o.userData.outline, false); });
+    hovered = root;
+    if (root) root.traverse((o) => { if (o.userData.outline) o.material = outlineMat(o.userData.outline, true); });
+    canvas.classList.toggle("hovering", !!root);
+    const tip = $("tip");
+    if (root && cx != null) { tip.replaceChildren(el("small", null, root.userData.info.kindLabel), document.createTextNode(root.userData.info.title)); tip.style.left = `${Math.min(cx, innerWidth - 300)}px`; tip.style.top = `${Math.min(cy, innerHeight - 80)}px`; tip.hidden = false; }
+    else tip.hidden = true;
+  }
+  canvas.addEventListener("pointermove", (e) => {
+    pointer.x = (e.clientX / innerWidth) * 2 - 1; pointer.y = (e.clientY / innerHeight) * 2 - 1;
+    if (finePointer) setHover(pickAt(e.clientX, e.clientY), e.clientX, e.clientY);
+  });
+  canvas.addEventListener("pointerleave", () => setHover(null));
+  canvas.addEventListener("click", (e) => { const r = pickAt(e.clientX, e.clientY); if (r) activate(r); });
+  function activate(root) {
+    const info = root.userData.info; root.userData.squish = 1;
+    if (info.refresh) return refreshAll(true);
+    if (info.book) return openBook();
+    if (info.jar) return openJar();
+    if (info.sponge) return openSponge();
+    if (info.addNote) return openSticky();
+    if (info.tea) { toast(["a warm sip · take a breath", "mmm, still hot", "slow down, sip, then pinch"][Math.floor(Math.random() * 3)]); return; }
+    inspect(info, root);
+  }
+
+  const clock = new T.Clock(); const tmp = new T.Vector3();
+  function frame() {
+    const dt = Math.min(clock.getDelta(), .05); const t = clock.elapsedTime;
+    const v = VIEWS[view]; const k = Math.max(1, 1.5 / camera.aspect);
+    const targetPos = v.pos.clone().sub(v.look).multiplyScalar(k).add(v.look);
+    if (!reduced) { targetPos.x += pointer.x * .8 + Math.sin(t * .17) * .25; targetPos.y += -pointer.y * .4 + Math.sin(t * .23) * .12; }
+    camPos.lerp(targetPos, .045); camLook.lerp(v.look, .045);
+    camera.position.copy(camPos); camera.lookAt(camLook);
+    if (!reduced) {
+      groups.lumps.children.forEach((g, i) => { if (g.userData.breathe && !g.userData.poofing) { const s = g.userData.baseScale * (1 + Math.sin(t * 2 + i) * .025); g.scale.set(s * (1 + Math.sin(t * 2 + i) * .02), s, s); } if (g.userData.tool) g.userData.tool.position.y = .9 + Math.sin(t * 2.4 + i) * .08; });
+      groups.meetings.children.forEach((g, i) => { if (g.userData.float) g.position.y = .28 + Math.sin(t * 1.6) * .05; });
+      const mp = motes.geometry.attributes.position; for (let i = 0; i < mp.count; i++) { let y = mp.getY(i) + .0025; if (y > 6.6) y = .5; mp.setY(i, y); mp.setX(i, mp.getX(i) + Math.sin(t + i) * .0012); } mp.needsUpdate = true;
+      if (busy) roller.rotation.x += .08, pinGroup.position.x = .2 + Math.sin(t * 3) * .5;
+    }
+    for (const r of [...picks.meetings, ...picks.notes, ...picks.lumps, ...picks.pieces, bookGroup, pinGroup, notePad]) {
+      if (!r.userData.base) r.userData.base = r.scale.clone();
+      if (r.userData.breathe || r.userData.poofing) continue;
+      const target = hovered === r ? 1.1 : 1; r.userData.hs = (r.userData.hs ?? 1) + ((target - (r.userData.hs ?? 1)) * .18);
+      const sq = r.userData.squish || 0; r.userData.squish = sq * .9;
+      const wob = reduced ? 0 : Math.sin(t * 18) * sq * .18;
+      r.scale.set(r.userData.base.x * r.userData.hs * (1 + wob), r.userData.base.y * r.userData.hs * (1 - wob), r.userData.base.z * r.userData.hs * (1 + wob));
+    }
+    for (let i = anims.length - 1; i >= 0; i--) { if (anims[i](dt, t)) anims.splice(i, 1); }
+    renderer.render(scene, camera);
+    const W = innerWidth, H = innerHeight;
+    for (const tg of tags) {
+      tg.obj.getWorldPosition(tmp); tmp.y += tg.lift * (tg.obj.scale?.y || 1); tmp.project(camera);
+      if (tmp.z > 1 || tmp.x < -1.1 || tmp.x > 1.1 || tmp.y < -1.1 || tmp.y > 1.1) { tg.el.style.display = "none"; continue; }
+      tg.el.style.display = ""; tg.el.style.transform = `translate(${((tmp.x + 1) / 2) * W}px, ${((1 - tmp.y) / 2) * H}px) translate(-50%, -100%)`;
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+  window.__cap = {
+    S, picks,
+    setHour: (h) => { hourOverride = h; applyTime(); },
+    render: () => { renderAllLocal(); renderJar(); renderHud(); drawMarketCal(); },
+    frame: () => { for (let i = 0; i < 4; i++) frame(); },
+    toggleDone, openSponge, inspect, closeInspect, openBook, openJar,
+    setSponge: (scan) => { spongeScan = scan; spongeOn.clear(); scan.items.filter((x) => x.safe && !x.kept).forEach((x) => spongeOn.add(x.id)); renderSponge(); $("spongeList").hidden = false; },
+  };
+
+  function flyPellet(fromObj) {
+    if (!fromObj || reduced) return renderJar();
+    const start = new T.Vector3(); fromObj.getWorldPosition(start); start.y += .6;
+    const end = new T.Vector3(JAR.x, 1.8, JAR.z);
+    const p = new T.Mesh(new T.SphereGeometry(.16, 14, 10), clayMat(CLAY[CLAY_KEYS[Math.floor(Math.random() * 5)]])); p.castShadow = true; scene.add(p);
+    let k = 0;
+    anims.push((dt) => { k = Math.min(1, k + dt / .9); p.position.lerpVectors(start, end, k); p.position.y += Math.sin(k * Math.PI) * 2.6; if (k >= 1) { scene.remove(p); p.geometry.dispose(); p.material.dispose(); renderJar(); return true; } return false; });
+  }
+
+  // ---------- keyboard / screen reader object list ----------
+  function rebuildA11y() {
+    const ul = $("a11y"); const mk = (root) => {
+      const li = el("li"); const b = el("button", null, `${root.userData.info.kindLabel}: ${root.userData.info.title}`); b.type = "button";
+      b.addEventListener("focus", () => { const p = new T.Vector3(); root.getWorldPosition(p); p.project(camera); setHover(root, ((p.x + 1) / 2) * innerWidth, ((1 - p.y) / 2) * innerHeight); });
+      b.addEventListener("blur", () => setHover(null)); b.addEventListener("click", () => activate(root)); li.appendChild(b); return li;
+    };
+    ul.replaceChildren(...[...picks.notes, ...picks.meetings, ...picks.lumps, ...picks.pieces, notePad, marketCal, bookGroup, jarGlass, pinGroup].map(mk));
+  }
+
+  // ================= HUD + progress =================
+  function renderHud() {
+    const p = S.progress.points || 0; $("points").textContent = p;
+    let lvl = LEVELS[0], next = null; for (let i = 0; i < LEVELS.length; i++) if (p >= LEVELS[i][0]) { lvl = LEVELS[i]; next = LEVELS[i + 1] || null; }
+    $("level").textContent = lvl[1]; $("nextLevel").textContent = next ? `${next[0] - p} to ${next[1]}` : "top of the studio";
+    let streak = 0; const d = new Date(); if (!(S.progress.days?.[dayKey(d)] || []).length) d.setDate(d.getDate() - 1);
+    while ((S.progress.days?.[dayKey(d)] || []).length) { streak++; d.setDate(d.getDate() - 1); }
+    $("streak").textContent = streak;
+  }
+  let writing = Promise.resolve();
+  function saveProgress() {
+    if (!S.db || !S.uid) return;
+    const days = S.progress.days || {}; const keep = Object.keys(days).sort().slice(-45);
+    const keptKeys = new Set(keep.flatMap((k) => days[k] || [])); const titles = Object.fromEntries(Object.entries(S.progress.titles || {}).filter(([k]) => keptKeys.has(k)));
+    writing = writing.then(() => S.db.collection(`data/users/${S.uid}`).doc("progress").set({ points: S.progress.points || 0, days: Object.fromEntries(keep.map((k) => [k, days[k]])), titles,
+      discarded: Object.fromEntries(Object.entries(S.progress.discarded || {}).filter(([, at]) => at > Date.now() - 90 * 864e5)) }))
+      .catch((e) => toast(`could not save your points (${e?.code || "unknown error"})`));
+  }
+  function poof(obj, then) {
+    const s0 = obj.scale.clone(); obj.userData.poofing = true; let k = 0;
+    anims.push((dt) => { k = Math.min(1, k + dt / .4); const f = Math.max(0, 1 - k) * (1 + .3 * Math.sin(k * Math.PI)); obj.scale.set(s0.x * f, s0.y * f, s0.z * f); if (k >= 1) { then(); return true; } return false; });
+  }
+  function toggleDone(key, kind, fromObj, title) {
+    const day = dayKey(); const list = new Set(S.progress.days?.[day] || []); const pts = POINTS[kind] || 5; let added = false;
+    if (list.has(key)) { list.delete(key); S.progress.points = Math.max(0, (S.progress.points || 0) - pts); toast("back on the table"); }
+    else { list.add(key); added = true; S.progress.points = (S.progress.points || 0) + pts; S.progress.titles = { ...(S.progress.titles || {}), [key]: { title: title || key, kind, at: Date.now() } };
+      toast(`+${pts} · ${["lovely varnish!", "smooth as a fresh sponge pass", "into the jar it goes!", "sanded and fabulous", "pinch perfect"][Math.floor(Math.random() * 5)]}`); }
+    S.progress.days = { ...(S.progress.days || {}), [day]: [...list] };
+    if (kind === "note" && S.db && S.uid) S.db.collection(`data/users/${S.uid}/stickies/items`).doc(key.slice(5)).update({ doneAt: added ? new Date().toISOString() : "" }).catch(() => toast("could not update that note"));
+    renderHud(); saveProgress();
+    clearTimeout(toggleDone._re); toggleDone._re = setTimeout(() => summarize(true), 3000);
+    if (added && fromObj) { flyPellet(fromObj); if (kind !== "meeting" && kind !== "sketch" && !reduced && document.visibilityState === "visible") poof(fromObj, renderAllLocal); else renderAllLocal(); }
+    else { renderAllLocal(); renderJar(); }
+    if (!$("jarList").hidden) renderDoneList();
+  }
+  let stickyColor = "butter";
+  Object.entries(STICKY).forEach(([name, hex]) => { const b = el("button"); b.type = "button"; b.style.background = hex; b.setAttribute("aria-label", name); b.setAttribute("aria-pressed", String(name === stickyColor));
+    b.addEventListener("click", () => { stickyColor = name; $("sticky").style.setProperty("--sticky", hex); [...$("stickySwatches").children].forEach((c) => c.setAttribute("aria-pressed", String(c === b))); });
+    $("stickySwatches").appendChild(b); });
+  function openSticky() {
+    if (!S.db || !S.uid) return toast("open this page in Claude to pin your own notes");
+    $("sticky").hidden = false; $("scrim").hidden = false; $("stickyErr").hidden = true; $("stickyText").focus({ preventScroll: true });
+  }
+  function closeSticky() { $("sticky").hidden = true; $("scrim").hidden = true; }
+  $("stickyClose").addEventListener("click", closeSticky);
+  $("stickyText").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) $("sticky").requestSubmit(); });
+  $("sticky").addEventListener("submit", async (ev) => {
+    ev.preventDefault(); const text = $("stickyText").value.trim(); if (!text) return;
+    try { await S.db.collection(`data/users/${S.uid}/stickies/items`).add({ text, color: stickyColor, doneAt: "", createdAt: new Date().toISOString() }); $("stickyText").value = ""; closeSticky(); toast("pinned to the board"); }
+    catch { $("stickyErr").textContent = "Could not pin it. Check your connection and try again."; $("stickyErr").hidden = false; }
+  });
+  async function throwNote(id) {
+    try { await S.db.collection(`data/users/${S.uid}/stickies/items`).doc(id).delete(); closeInspect(); toast("note thrown away"); }
+    catch { toast("could not throw it away, try again"); }
+  }
+  // ---------- sponge: free memory and disk ----------
+  const gb = (b) => b == null ? "" : b >= 1e9 ? `${(b / 1e9).toFixed(1)} GB` : `${Math.max(1, Math.round(b / 1e6))} MB`;
+  let spongeScan = null; const spongeOn = new Set();
+  function closeSponge() { $("spongeList").hidden = true; $("scrim").hidden = true; }
+  $("spongeClose").addEventListener("click", closeSponge);
+  async function openSponge() {
+    $("spongeList").hidden = false; $("scrim").hidden = false; $("spongeClose").focus({ preventScroll: true });
+    if (!S.mcp) { $("spongeItems").replaceChildren(el("li", "empty", "open this page in the Claude app to use the sponge")); $("spongeGo").hidden = true; $("spongeNote").textContent = ""; return; }
+    $("spongeItems").replaceChildren(el("li", "empty", "squeezing the sponge… checking slots and worktrees (about 20 seconds)")); $("spongeGo").hidden = true; $("spongeNote").textContent = "";
+    try {
+      spongeScan = (await S.mcp.callTool(HOST, "sponge_scan", {}, { cache: false })).payload || { items: [] };
+      spongeOn.clear(); spongeScan.items.filter((x) => x.safe && !x.kept).forEach((x) => spongeOn.add(x.id)); renderSponge();
+    } catch (e) { $("spongeItems").replaceChildren(el("li", "empty", e?.code === "server_not_connected" || e?.code === "tool_not_found" ? "the helper needs the new sponge tools: quit the Claude app with ⌘Q and open it again" : `could not check (${e?.code || "error"})`)); }
+  }
+  function renderSponge(results) {
+    const items = spongeScan?.items || []; const done = new Map((results || []).map((r) => [r.id, r]));
+    const row = (x) => { const r = done.get(x.id); const li = el("li", x.kept || (!x.safe && x.why) ? "kept" : r?.ok ? "gone" : spongeOn.has(x.id) ? "on" : "");
+      const box = el("button", "box"); box.type = "button"; box.setAttribute("aria-label", x.label); box.setAttribute("aria-pressed", String(spongeOn.has(x.id)));
+      if (!x.kept && !x.why && !results) box.addEventListener("click", () => { spongeOn.has(x.id) ? spongeOn.delete(x.id) : spongeOn.add(x.id); renderSponge(); });
+      const txt = el("span", "txt", x.label); txt.append(el("small", null, r && !r.ok ? `not wiped: ${r.reason}` : x.why ? `${x.detail} · kept: ${x.why}` : x.detail));
+      li.append(box, txt, el("span", "size", x.ram ? "RAM" : gb(x.bytes))); return li; };
+    const wipeable = items.filter((x) => !x.kept), kept = items.filter((x) => x.kept);
+    const nodes = wipeable.length ? wipeable.map(row) : [el("li", "empty", "nothing to wipe · the studio is already tidy")];
+    if (kept.length) nodes.push(el("h3", null, "Kept · still in use or not pushed"), ...kept.map(row));
+    $("spongeItems").replaceChildren(...nodes);
+    const pick = wipeable.filter((x) => spongeOn.has(x.id)); const total = pick.reduce((a, x) => a + (x.bytes || 0), 0); const ram = pick.some((x) => x.ram);
+    if (results) { const freed = results.filter((r) => r.ok).reduce((a, r) => a + (r.bytes || 0), 0); $("spongeNote").textContent = `${results.filter((r) => r.ok).length} wiped · ${gb(freed) || "0 MB"} of disk freed`; $("spongeGo").hidden = true; return; }
+    $("spongeNote").textContent = pick.length ? `Worktrees go, their branches stay on GitHub.` : "Tick what to wipe.";
+    $("spongeGo").hidden = !pick.length; $("spongeGo").textContent = `Wipe ${pick.length}${total ? " · " + gb(total) : ""}${ram ? " + RAM" : ""}`;
+  }
+  $("spongeGo").addEventListener("click", async () => {
+    const ids = [...spongeOn]; if (!ids.length) return; $("spongeGo").disabled = true; $("spongeGo").textContent = "wiping…"; sponge.userData.squish = 1;
+    try { const res = (await S.mcp.callTool(HOST, "sponge_wipe", { ids }, { cache: false })).payload || { results: [] }; renderSponge(res.results);
+      const freed = res.results.filter((r) => r.ok).reduce((a, r) => a + (r.bytes || 0), 0); toast(freed ? `squeaky clean · ${gb(freed)} freed` : "squeaky clean"); }
+    catch (e) { $("spongeNote").textContent = e?.code === "cancelled" ? "okay, nothing wiped" : `could not wipe (${e?.code || "error"})`; }
+    finally { $("spongeGo").disabled = false; }
+  });
+  function openJar() { renderDoneList(); $("jarList").hidden = false; $("scrim").hidden = false; $("jarClose").focus({ preventScroll: true }); }
+  function closeJar() { $("jarList").hidden = true; $("scrim").hidden = true; }
+  $("jarClose").addEventListener("click", closeJar);
+  function renderDoneList() {
+    const keys = S.progress.days?.[dayKey()] || []; const box = $("doneList");
+    if (!keys.length) { box.replaceChildren(el("li", "empty", "nothing in the jar yet… pick up a piece and press Done")); return; }
+    box.replaceChildren(...keys.map((k) => {
+      const t = S.progress.titles?.[k] || { title: k.replace(/^[a-z]+:/, ""), kind: k.split(":")[0] };
+      const li = el("li", "done"); const tick = el("span", "box"); tick.setAttribute("aria-hidden", "true");
+      const undo = el("button", "erase", "undo"); undo.type = "button"; undo.addEventListener("click", () => toggleDone(k, t.kind, null));
+      li.append(tick, el("span", "txt", t.title), undo); return li;
+    }));
+  }
+
+  // ---------- inspector ----------
+  let current = null;
+  function inspect(info, root) {
+    current = { ...info, root };
+    $("inKind").textContent = info.kindLabel; $("inTitle").textContent = info.title;
+    $("inMeta").replaceChildren(...(info.meta || []).filter(Boolean).map(([t, c]) => el("span", c || "", t)));
+    $("inText").textContent = info.text || ""; $("inText").hidden = !info.text;
+    $("inMore").textContent = info.more || ""; $("inMore").hidden = !info.more;
+    const url = info.href && safeUrl(info.href, ["https:", "claude:"]);
+    $("inGo").hidden = !(url || info.onGo); if (url || info.onGo) { $("inGo").href = url || "#"; $("inGo").textContent = info.goLabel || "Open"; }
+    $("inCopy").hidden = !info.copy; if (info.copy) $("inCopy").textContent = info.copy.label;
+    $("inEyes").hidden = info.kind !== "slack" || !slackRef(info.href); $("inEyes").textContent = "👀 On it";
+    $("inDiscard").hidden = !!info.noDone || info.kind === "note" || info.kind === "sketch";
+    $("inDone").hidden = !!info.noDone; syncDoneBtn(); const box = $("inspect"); box.hidden = false; requestAnimationFrame(() => box.classList.add("open")); $("inDone").focus({ preventScroll: true });
+  }
+  function syncDoneBtn() { if (!current) return; $("inDone").textContent = doneToday().has(current.key) ? "Not done yet" : `Done · +${POINTS[current.kind]} points`; }
+  function closeInspect() { const b = $("inspect"); b.classList.remove("open"); setTimeout(() => { if (!current) b.hidden = true; }, 230); current = null; }
+  $("inClose").addEventListener("click", closeInspect);
+  $("inGo").addEventListener("click", (e) => { if (current?.onGo) { e.preventDefault(); current.onGo(); } });
+  $("inCopy").addEventListener("click", () => { const c = current?.copy; if (!c) return;
+    navigator.clipboard?.writeText(c.text).then(() => toast("copied · paste it in a terminal"), () => toast(c.text)); });
+  function slackRef(url) {
+    const m = String(url || "").match(/\/archives\/([A-Z0-9]+)\/p(\d{10})(\d{6})/);
+    return m ? { channel_id: m[1], message_ts: `${m[2]}.${m[3]}` } : null;
+  }
+  async function reactSlack(url, emoji, quiet) {
+    const ref = slackRef(url); if (!ref || !S.mcp) return false;
+    try { await S.mcp.callTool("Slack", "slack_add_reaction", { ...ref, emoji }, { cache: false }); if (!quiet) toast(emoji === "eyes" ? "👀 left on the message" : "✅ left on the message"); return true; }
+    catch (e) { toast(e?.code === "cancelled" ? "okay, no reaction" : `could not react in Slack (${e?.code || "error"})`); return false; }
+  }
+  $("inEyes").addEventListener("click", async () => { const href = current?.href; if (!href) return; $("inEyes").disabled = true;
+    if (await reactSlack(href, "eyes")) $("inEyes").textContent = "👀 Sent"; $("inEyes").disabled = false; });
+  async function closeCmuxTab(cmuxTitle, cmuxName) {
+    if (!S.mcp) return;
+    try {
+      const r = (await S.mcp.callTool(HOST, "close_session", { cmuxTitle: cmuxTitle || undefined, cmuxName: cmuxName || undefined }, { cache: false })).payload || {};
+      if (r.closed) setTimeout(() => toast("done · its cmux tab is closed"), 2300);
+      else setTimeout(() => toast(r.reason === "access_denied" ? "done · cmux would not let me close the tab (Socket Control Mode)" : r.reason === "password_needed" ? "done · cmux needs its socket password set" : `done · cmux tab not closed (${r.reason || "no answer"})`), 2300);
+    } catch (e) { setTimeout(() => toast(e?.code === "cancelled" ? "done · left the cmux tab open" : `done · could not reach cmux (${e?.code || "error"})`), 2300); }
+  }
+  async function openSession(args) {
+    if (!S.mcp) return toast("open this page in the Claude app to jump to sessions");
+    try {
+      const res = await S.mcp.callTool(HOST, "open_session", args, { cache: false }); const r = res.payload || {};
+      if (r.opened === "cmux" && !r.focused) toast(r.reason === "access_denied" ? "cmux is in front · it blocks tab-jumping (Socket Control Mode in cmux Settings)" : "cmux is in front · could not find the exact tab");
+      else toast("opening your session…");
+    } catch (e) { toast(e?.code === "cancelled" ? "okay, not opening it" : `could not open it (${e?.code || "error"})`); }
+  }
+  $("inDone").addEventListener("click", () => {
+    if (!current) return; const k = current.key;
+    const root = [...picks.meetings, ...picks.notes, ...picks.lumps, ...picks.pieces].find((r) => r.userData.info.key === k);
+    const cmuxTitle = current.cmuxTitle, cmuxName = current.cmuxName; toggleDone(k, current.kind, root, current.title); syncDoneBtn(); if ((cmuxTitle || cmuxName) && doneToday().has(k)) closeCmuxTab(cmuxTitle, cmuxName); if (current.kind === "slack" && doneToday().has(k)) reactSlack(current.href, "white_check_mark", true).then((ok) => ok && setTimeout(() => toast("✅ left on the Slack message"), 2300)); if (doneToday().has(k)) setTimeout(() => { if (current && current.key === k) closeInspect(); }, 700);
+  });
+  $("inDiscard").addEventListener("click", () => {
+    if (!current) return; const k = current.key;
+    const root = [...picks.meetings, ...picks.notes, ...picks.lumps, ...picks.pieces].find((r) => r.userData.info.key === k);
+    S.progress.discarded = { ...(S.progress.discarded || {}), [k]: Date.now() }; saveProgress(); closeInspect();
+    toast("tucked away · it won't come back");
+    if (root && !reduced && document.visibilityState === "visible") poof(root, renderAllLocal); else renderAllLocal();
+    clearTimeout(toggleDone._re); toggleDone._re = setTimeout(() => summarize(true), 3000);
+  });
+  document.addEventListener("keydown", (e) => { if (e.key !== "Escape") return; if (!$("sticky").hidden) closeSticky(); else if (!$("book").hidden) closeBook(); else if (!$("jarList").hidden) closeJar(); else if (!$("spongeList").hidden) closeSponge(); else if (current) closeInspect(); });
+
+  // ---------- sketchbook overlay ----------
+  function openBook() { $("book").hidden = false; $("scrim").hidden = false; renderSketchList(); $("skTitle").focus({ preventScroll: true }); }
+  function closeBook() { $("book").hidden = true; $("scrim").hidden = true; }
+  $("bookClose").addEventListener("click", closeBook); $("scrim").addEventListener("click", () => { closeBook(); closeJar(); closeSticky(); closeSponge(); });
+  function renderSketchList() {
+    const box = $("sketch"); const done = doneEver();
+    if (!S.db || !S.uid) { box.replaceChildren(el("li", "empty", "open this page in Claude to keep a sketchbook")); $("addForm").hidden = true; return; }
+    if (!S.sketch.length) { box.replaceChildren(el("li", "empty", "empty page… write your first idea below")); return; }
+    box.replaceChildren(...S.sketch.map((s) => {
+      const key = `sketch:${s.id}`; const li = el("li", done.has(key) ? "done" : "");
+      const bx = el("button", "box"); bx.type = "button"; bx.setAttribute("aria-label", `Mark ${s.title} as done`); bx.setAttribute("aria-pressed", String(done.has(key)));
+      bx.addEventListener("click", () => toggleDone(key, "sketch", bookGroup, s.title));
+      const txt = el("span", "txt"); const link = safeUrl(s.link);
+      if (link) { const a = el("a", null, s.title); a.href = link; a.target = "_blank"; a.rel = "noopener"; txt.appendChild(a); } else txt.textContent = s.title;
+      const x = el("button", "erase", "erase"); x.type = "button";
+      x.addEventListener("click", async () => {
+        if (!x.classList.contains("armed")) { x.classList.add("armed"); x.textContent = "sure?"; setTimeout(() => { x.classList.remove("armed"); x.textContent = "erase"; }, 3000); return; }
+        try { await S.db.collection(`data/users/${S.uid}/sketchbook/items`).doc(s.id).delete(); } catch { toast("could not erase it, try again"); }
+      });
+      const tools = el("span", "mk");
+      if (!link && S.mcp) {
+        const mk = (label, kind) => { const b = el("button", "erase", label); b.type = "button"; b.addEventListener("click", () => makeDoc(s, kind, b)); return b; };
+        tools.append(mk("→ Notion", "notion"), mk("→ Claude doc", "doc"));
+      }
+      tools.appendChild(x);
+      li.append(bx, txt, tools); return li;
+    }));
+  }
+  // turn an idea into a real document, then keep its link on the idea
+  async function draftBody(title) {
+    const fallback = `## Goal\n\n- \n\n## Why now\n\n- \n\n## Open questions\n\n- \n\n## First steps\n\n- `;
+    if (!S.sample) return fallback;
+    try {
+      const out = await S.sample(`Write a short starter outline in plain Markdown for a working document titled "${title}". The author is ${CFG.about || "a software engineer"}. Use exactly these four "##" headings: Goal, Why now, Open questions, First steps. Under each, 2 to 4 short bullet points with concrete, useful prompts or first guesses. No title line, no tables, no images, no links, no bold. Max 160 words.`, { modelTier: "quick", cache: false });
+      const text = String(out?.text || "").trim(); return text.length > 40 ? text.slice(0, 6000) : fallback;
+    } catch { return fallback; }
+  }
+  const findUrl = (v, host) => { const m = JSON.stringify(v ?? "").match(new RegExp(`https://(?:www\\.)?${host}[^\\s"\\\\<>)]*`)); return m ? m[0] : null; };
+  let making = false;
+  async function makeDoc(item, kind, btn) {
+    if (making) return; making = true; const label = btn.textContent; btn.textContent = "writing…";
+    const name = String(item.title).replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, 180);
+    try {
+      const body = await draftBody(name); let url = null;
+      if (kind === "notion") {
+        const res = await S.mcp.callTool("Notion", "notion-create-pages", { creation_mode: "draft", allow_async: false, pages: [{ properties: { title: name }, content: body }] }, { cache: false });
+        url = findUrl(res.payload ?? res.content, "notion\\.so/") || findUrl(res.content, "notion\\.so/") || findUrl(res.payload, "app\\.notion\\.com/");
+      } else {
+        const res = await S.mcp.callTool("Claude Docs", "batch", { container: { kind: "project", create: { name, doc: { markdown: body } } }, batch: [] }, { cache: false });
+        url = safeUrl(res.payload?.url) || findUrl(res.payload, "claude\\.ai/");
+      }
+      if (url && safeUrl(url)) { await S.db.collection(`data/users/${S.uid}/sketchbook/items`).doc(item.id).update({ link: safeUrl(url) }); toast(kind === "notion" ? "Notion page created · linked" : "Claude doc created · linked"); }
+      else toast(kind === "notion" ? "created in Notion (private draft) · could not read its link" : "doc created · find it in Claude Docs");
+    } catch (e) {
+      const c = e?.code; const where = kind === "notion" ? "Notion" : "Claude Docs";
+      toast(c === "approval_required" || c === "not_in_manifest" || c === "consent_required" ? `${where} needs your approval for this page` : c === "server_not_connected" || c === "needs_reauth" ? `connect ${where} in claude.ai Settings → Connectors` : c === "tool_error" ? `${where} refused it · nothing was created` : `${where} did not confirm · check there before trying again`);
+    } finally { making = false; btn.textContent = label; }
+  }
+  $("addForm").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const title = $("skTitle").value.trim(); const linkRaw = $("skLink").value.trim();
+    if (!title || !S.db || !S.uid) return;
+    const link = linkRaw ? safeUrl(/^https?:/.test(linkRaw) ? linkRaw : `https://${linkRaw}`) : null;
+    if (linkRaw && !link) { $("skErr").textContent = "That link does not look like a web address. Paste the full https:// link."; $("skErr").hidden = false; return; }
+    $("skErr").hidden = true;
+    try { await S.db.collection(`data/users/${S.uid}/sketchbook/items`).add({ title, link: link || "", note: "", createdAt: new Date().toISOString() }); $("skTitle").value = ""; $("skLink").value = ""; toast("sketched!"); }
+    catch { $("skErr").textContent = "Could not save it. Check your connection and try again."; $("skErr").hidden = false; }
+  });
+
+  // ---------- studio notes (problems + setup) ----------
+  function setNote(source, lines, action) { if (!lines) delete S.notes[source]; else S.notes[source] = { lines, action }; renderNotes(); }
+  function renderNotes() {
+    $("studioNotes").replaceChildren(...Object.values(S.notes).map(({ lines, action }) => {
+      const g = el("div", "scrap"); lines.forEach((l) => g.appendChild(typeof l === "string" ? el("div", null, l) : l));
+      if (action) { const b = el("button", null, action.label); b.type = "button"; b.addEventListener("click", action.run); g.appendChild(b); } return g;
+    }));
+  }
+  function errorCopy(e, server) {
+    const code = e?.code || "upstream_error";
+    if (code === "needs_reauth") return `Reconnect ${server} in claude.ai Settings → Connectors, then roll to refresh.`;
+    if (code === "server_not_connected" || code === "selection_required") return `Add ${server} in claude.ai Settings → Connectors, then roll to refresh.`;
+    if (code === "not_in_manifest" || code === "approval_required" || code === "consent_required") return `This page is not allowed to read ${server} yet.`;
+    if (code === "blocked_by_policy") return `Your organization blocks ${server} here.`;
+    if (code === "tool_error") return `${server} answered with an error: ${String(e.message || "").slice(0, 140)}`;
+    return `${server} did not answer. Roll to refresh in a moment.`;
+  }
+  const needsAsk = (e) => ["approval_required", "not_in_manifest", "consent_required"].includes(e?.code);
+  async function call(server, tool, input, fresh) {
+    try { return await S.mcp.callTool(server, tool, input, { cache: fresh ? { refresh: true, staleTime: 120000, gcTime: 600000 } : { staleTime: 120000, gcTime: 600000 } }); }
+    catch (e) { if (e?.retryable && fresh !== "retried") { await new Promise((r) => setTimeout(r, Math.min(e.retryAfterMs || 900 + Math.random() * 900, 5000))); return call(server, tool, input, "retried"); } throw e; }
+  }
+
+  // ---------- data ----------
+  async function loadMeetings(fresh) {
+    if (!S.mcp) return;
+    const d = dayKey();
+    try {
+      const res = await call("Google Calendar", "list_events", { startTime: `${d}T00:00:00`, endTime: `${d}T23:59:59`, orderBy: "startTime", pageSize: 40 }, fresh);
+      const evs = (res.payload?.events || []).filter((e) => e.start?.dateTime && e.status !== "cancelled" && e.eventType !== "WORKING_LOCATION");
+      S.data.meetings = evs.map((e) => { const self = (e.attendees || []).find((a) => a.self);
+        return { id: e.id, title: e.summary || "(no title)", start: new Date(e.start.dateTime), end: new Date(e.end?.dateTime || e.start.dateTime),
+          rsvp: self?.responseStatus || (e.organizer?.self ? "accepted" : "none"), join: e.conferenceUrl || e.hangoutLink || e.conferenceData?.videoEntryPoint?.uri || null, link: e.htmlLink,
+          reminder: e.transparency === "transparent" && !(e.attendees || []).length, location: e.location || "", people: (e.attendees || []).filter((a) => !a.self).length }; });
+      setNote("calendar", null); renderMeetings();
+    } catch (e) { setNote("calendar", [Object.assign(el("b"), { textContent: "Work board" }), errorCopy(e, "Google Calendar")], needsAsk(e) ? { label: "Allow Google Calendar", run: () => loadMeetings(true) } : null); }
+  }
+  function parseSlack(text) {
+    if (typeof text !== "string") return [];
+    return text.split(/### Result \d+ of \d+/).slice(1).map((b) => { const g = (re) => (b.match(re) || [])[1]?.trim() || "";
+      return { channel: g(/Channel:\s*(.+?)\s*\(ID/), participants: g(/Participants:\s*(.+)/), from: g(/From:\s*([^<\n]+?)\s*</), fromId: g(/From:.*?\(ID:\s*(\w+)\)/),
+        time: g(/Time:\s*(.+)/), permalink: g(/Permalink:\s*\[link\]\((.+?)\)/), text: ((b.split(/\nText:\s*\n/)[1] || "").split(/\n---/)[0].trim()).slice(0, 600) }; }).filter((m) => m.permalink);
+  }
+  async function loadSlack(fresh) {
+    if (!S.mcp) return;
+    if (!CFG.slack.userId) return setNote("slack", [Object.assign(el("b"), { textContent: "Corkboard" }), "Add your Slack user id (slack.userId) to ~/.config/clayday/config.json to fill the board."]);
+    const since = new Date(); since.setHours(0, 0, 0, 0); since.setDate(since.getDate() - 2);
+    const base = { after: String(Math.floor(since.getTime() / 1000)), sort: "timestamp", include_context: false, limit: 20, max_context_length: 300 };
+    try {
+      const [ment, dms, team] = await Promise.all([
+        call("Slack", "slack_search_public_and_private", { ...base, keywords: [`<@${CFG.slack.userId}>`], natural_language_query: "" }, fresh),
+        call("Slack", "slack_search_public_and_private", { ...base, filters: "is:dm", natural_language_query: "" }, fresh),
+        CFG.slack.teamId ? call("Slack", "slack_search_public_and_private", { ...base, keywords: [`<@${CFG.slack.teamId}>`], natural_language_query: "" }, fresh).catch(() => null) : null,
+      ]);
+      const teamMsgs = parseSlack(team?.payload?.results ?? team?.payload).map((m) => ({ ...m, team: true }));
+      S.data.slack = await triageSlack([...parseSlack(ment.payload?.results ?? ment.payload), ...teamMsgs], parseSlack(dms.payload?.results ?? dms.payload), fresh);
+      setNote("slack", null); renderSlack();
+    } catch (e) { setNote("slack", [Object.assign(el("b"), { textContent: "Corkboard" }), errorCopy(e, "Slack")], needsAsk(e) ? { label: "Allow Slack", run: () => loadSlack(true) } : null); }
+  }
+  async function triageSlack(mentions, directs, fresh) {
+    const raw = () => mentions.filter((m) => m.fromId !== CFG.slack.userId).slice(0, 8).map((m) => ({ who: m.from, where: (m.channel === "DM" ? "DM" : m.channel) + (m.team ? " · team" : ""), summary: m.text.slice(0, 140), ask: "", urgency: "today", permalink: m.permalink, time: m.time }));
+    if (!S.sample) return raw();
+    const prompt = [
+      "You triage Slack for " + who() + " (Slack id " + CFG.slack.userId + "), " + (CFG.about || "a software engineer") + ".",
+      "Below are recent messages that mention " + who() + (CFG.slack.teamId ? " or their team group " + (CFG.slack.teamHandle || "") + " (id " + CFG.slack.teamId + ", marked team: true)" : "") + ", and recent DM messages (some written by " + who() + ").",
+      "A team mention (review request, question to the team) counts as needing " + who() + " unless someone on the team already replied or took it; put 'team' in where, e.g. \"#channel · team\".",
+      "Return ONLY a JSON array (max 8) of threads that still need " + who() + " to do something: an unanswered question to them, a request, a review, a decision.",
+      "Drop: bot or alert noise, chit-chat, thanks, things " + who() + " already answered (in a DM, if their message is the newest in that DM, it does not need them), and their own messages.",
+      "Group several messages from the same DM or thread into one item.",
+      'Each item: {"who": first name, "where": "#channel" or "DM", "summary": what they said, max 120 chars, "ask": what " + who() + " should do, max 40 chars, imperative, "urgency": "now" | "today" | "whenever", "permalink": copy the exact permalink of the newest message in that thread, "time": copy its time}.',
+      "Write in plain English even if the source is in another language. Order by urgency, then newest first.",
+      "MENTIONS:", JSON.stringify(mentions), "DMS:", JSON.stringify(directs),
+    ].join("\n");
+    try { const out = await S.sample.json(prompt, { modelTier: "default", cache: fresh ? { refresh: true } : true }); return Array.isArray(out) ? out.slice(0, 8) : raw(); } catch { return raw(); }
+  }
+  const HOST_CMD = 'claude mcp add -s user clay-studio -- "$(which node)" ~/code/clay-studio/server.mjs';
+  function hostLines(e) {
+    const code = Object.assign(el("code"), { textContent: HOST_CMD });
+    const copy = el("button", null, "Copy command"); copy.type = "button";
+    copy.addEventListener("click", () => { navigator.clipboard?.writeText(HOST_CMD).then(() => { copy.textContent = "Copied"; }, () => { const r = document.createRange(); r.selectNodeContents(code); getSelection().removeAllRanges(); getSelection().addRange(r); copy.textContent = "Selected, press ⌘C"; }); });
+    return [Object.assign(el("b"), { textContent: "Cutting mat & drying rack" }),
+      "Your Claude sessions and pull requests come from a small helper on your Mac. It answers only in the Claude desktop app.",
+      "Run this once in a terminal, then quit the Claude app with ⌘Q and open it again:", code, copy,
+      Object.assign(el("small"), { textContent: `The page got: ${e?.code || "no answer"}${e?.message ? " · " + String(e.message).slice(0, 120) : ""}` })];
+  }
+  async function loadHost(fresh) {
+    if (!S.mcp) return;
+    const ok = () => setNote("host", null);
+    const fail = (e, src, what) => {
+      if (e?.code === "tool_error") return setNote(src, [Object.assign(el("b"), { textContent: what }), errorCopy(e, what)], { label: "Try again", run: () => loadHost(true) });
+      setNote("host", hostLines(e), { label: "Try again", run: () => loadHost(true) });
+    };
+    await Promise.all([
+      call(HOST, "claude_sessions", { days: 5, limit: 12 }, fresh).then((res) => { S.data.sessions = res.payload?.sessions || []; ok(); setNote("sessions", null); renderSessions(); }).catch((e) => fail(e, "sessions", "Cutting mat · Claude sessions")),
+      call(HOST, "github_prs", {}, fresh).then((res) => { S.data.prs = res.payload || { mine: [], toReview: [] }; ok(); setNote("prs", null); renderPrs(); }).catch((e) => fail(e, "prs", "Drying rack · GitHub")),
+    ]);
+  }
+  async function summarize(fresh) {
+    if (!S.sample) { $("pinchLine").textContent = "Here is everything waiting for you today."; return; }
+    const t = Date.now(); const done = doneEver();
+    const ctx = {
+      now: new Date().toString(),
+      meetings: (S.data.meetings || []).filter((m) => m.end.getTime() > t && m.rsvp !== "declined" && !done.has(`meeting:${m.id}`)).map((m) => ({ at: hm(m.start), title: m.title, rsvp: m.rsvp })),
+      slack: (S.data.slack || []).filter((m) => !slackDone(done, m)).map((m) => ({ who: m.who, ask: m.ask || m.summary, urgency: m.urgency })),
+      notesToSelf: S.myNotes.filter((n) => !n.doneAt).map((n) => n.text),
+      finishedToday: (S.progress.days?.[dayKey()] || []).map((k) => S.progress.titles?.[k]?.title).filter(Boolean).slice(-12),
+      sessions: (S.data.sessions || []).filter((s) => !/Clay Studio|Daily dashboard app/i.test(s.title) && !done.has(`session:${s.id}`)).slice(0, 6).map((s) => ({ title: s.title, yourTurn: s.yourTurn, updated: s.updatedAt, stopped: (s.whereItStopped || "").slice(0, 300) })),
+      prs: (S.data.prs?.mine || []).filter((p) => !done.has(`pr:${p.number}`)).map((p) => ({ n: p.number, title: p.title, ci: p.ci?.state, review: p.review, conflicts: p.mergeable === "CONFLICTING" })),
+      mergedWaitingForDeploy: (S.data.prs?.awaitingDeploy || []).map((p) => `#${p.number} ${p.title}`),
+      reviewsAsked: (S.data.prs?.toReview || []).filter((p) => !done.has(`review:${p.url}`)).map((p) => p.title), sketchbook: S.sketch.filter((s) => !done.has(`sketch:${s.id}`)).slice(0, 6).map((s) => s.title),
+    };
+    if (!ctx.meetings.length && !ctx.slack.length && !ctx.sessions.length && !ctx.prs.length && !ctx.sketchbook.length && !ctx.notesToSelf.length) { $("pinchLine").textContent = ctx.finishedToday.length ? [`${ctx.finishedToday.length} pieces sanded, varnished and on the shelf. The studio spirit is doing a little dance.`, `All clear! ${ctx.finishedToday.length} pieces done. Go touch some real clay.`, `${ctx.finishedToday.length} pieces finished. Even the rolling pin is impressed.`][ctx.finishedToday.length % 3] : "Not a crumb of clay out of place. Put the kettle on."; $("moves").replaceChildren(); return; }
+    const prompt = [
+      "You are the cheeky little spirit who lives in " + (CFG.name ? CFG.name + "'s" : "this") + " air-dry clay studio. Its owner is " + (CFG.about || "a software engineer") + "; you help them start the day without feeling scattered, and you make it fun. Below is their current state as JSON.",
+      "Voice: playful, cosy and a bit mischievous, like a Ghibli soot sprite who loves clay. Use clay-studio metaphors and gentle puns: Slack asks are notes on the board, PRs are pieces drying on the rack, sessions are lumps on the mat, deploys are market day, merged PRs are packed in the cart. They model air-dry clay by hand with tools, so never mention a kiln, a wheel, firing, throwing or glaze. Tease kindly, celebrate wins, never nag.",
+      "Return ONLY JSON: {\"line\": one fun sentence (max 120 chars) on where they left off and the shape of their day,",
+      "\"moves\": up to 3 objects {\"text\": the concrete action said playfully, max 55 chars, still naming the real person, PR number or session so they know what to do, \"why\": a short fun reason, max 60 chars}}.",
+      "Pick moves by: anything due before the next meeting, people blocked on them, red CI on approved PRs, sessions where it is their turn. Never suggest anything listed in finishedToday; if they have finished things, the line may acknowledge it briefly. If fewer than 3 real moves are left, return fewer. No emoji.",
+      JSON.stringify(ctx),
+    ].join("\n");
+    try {
+      const out = await S.sample.json(prompt, { modelTier: "quick", cache: fresh ? { refresh: true } : true });
+      if (out?.line) $("pinchLine").textContent = String(out.line);
+      $("moves").replaceChildren(...(Array.isArray(out?.moves) ? out.moves.slice(0, 3) : []).map((m) => { const li = el("li"); const d = el("div", null, m.text || ""); d.appendChild(el("small", null, m.why || "")); li.appendChild(d); return li; }));
+    } catch (e) { $("pinchLine").textContent = e?.code === "not_granted" ? "Here is everything waiting for you today." : "Claude could not write your plan just now. Everything on the table is current."; }
+  }
+
+  let busy = false;
+  async function loadConfig() {
+    if (!S.mcp) return;
+    try { const c = (await S.mcp.callTool(HOST, "studio_config", {}, { cache: false })).payload || {}; Object.assign(CFG, c, { slack: { ...CFG.slack, ...(c.slack || {}) } }); } catch {}
+    applyTime(); drawMarketCal();
+  }
+  async function refreshAll(fresh) {
+    if (busy) return; busy = true; $("refresh").classList.add("busy"); $("refresh").textContent = "Rolling…";
+    try { await cfgReady; await Promise.allSettled([loadMeetings(fresh), loadSlack(fresh), loadHost(fresh)]); await summarize(fresh); }
+    finally { busy = false; $("refresh").classList.remove("busy"); $("refresh").textContent = "Roll to refresh"; pinGroup.position.x = .2; }
+  }
+  function renderAllLocal() {
+    if (S.data.meetings) renderMeetings(); renderSlack(); if (S.data.sessions) renderSessions(); if (S.data.prs) renderPrs();
+    renderBookPages(); if (!$("book").hidden) renderSketchList();
+  }
+  $("refresh").addEventListener("click", () => refreshAll(true));
+  setInterval(() => { if (document.visibilityState === "visible" && S.mcp) loadMeetings(false); }, 5 * 60000);
+
+  // ---------- boot ----------
+  renderHud(); renderJar(); renderBookPages(); rebuildA11y();
+  document.fonts?.ready?.then(() => { drawMarketCal(); renderBookPages(); renderJar(); renderAllLocal(); });
+  const use = (n) => (window.claude?.use ? window.claude.use(n).catch(() => null) : Promise.resolve(null));
+  (async () => {
+    const [mcp, sample, db, user] = await Promise.all([use("mcp"), use("sample"), use("db"), use("user")]);
+    S.mcp = mcp; S.sample = sample; S.db = db; cfgReady = loadConfig();
+    if (!mcp) setNote("nomcp", ["Open this page in Claude to fill the studio with your meetings, Slack, sessions and pull requests."]);
+    if (db && user) {
+      try { S.uid = await user.id(); } catch { S.uid = null; }
+      if (S.uid) {
+        const timer = setTimeout(() => toast("your points are taking a while to load"), 10000);
+        db.collection(`data/users/${S.uid}`).doc("progress").onSnapshot((snap) => {
+          clearTimeout(timer); const d = snap.exists ? snap.data() : null; if (d) S.progress = { points: d.points || 0, days: d.days || {}, titles: d.titles || {}, discarded: d.discarded || {} };
+          renderHud(); renderJar(); renderAllLocal(); syncDoneBtn();
+        }, () => clearTimeout(timer));
+        db.collection(`data/users/${S.uid}/sketchbook/items`).orderBy("createdAt", "desc").onSnapshot((snap) => {
+          S.sketch = snap.docs.map((x) => ({ id: x.id, ...x.data() })); renderBookPages(); if (!$("book").hidden) renderSketchList();
+        }, () => toast("could not open your sketchbook"));
+        db.collection(`data/users/${S.uid}/stickies/items`).orderBy("createdAt", "desc").onSnapshot((snap) => {
+          S.myNotes = snap.docs.map((x) => ({ id: x.id, ...x.data() })); renderSlack();
+        }, () => toast("could not load your sticky notes"));
+      }
+    }
+    refreshAll(false);
+  })();
+})();
+</script>
+</body></html>

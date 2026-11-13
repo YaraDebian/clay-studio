@@ -1,0 +1,16 @@
+{
+  "name": "Sam",
+  "about": "a software engineer",
+  "slack": { "userId": "U0123456789", "teamId": "S0123456789", "teamHandle": "@my-team" },
+  "deployDashboardUrl": "https://example.com/deploys",
+  "github": { "repo": "my-org/my-repo", "reviewTeam": "my-org/my-team" },
+  "sponge": {
+    "repos": ["~/code/my-repo"],
+    "pool": {
+      "scripts": "~/path/to/pool-scripts",
+      "cwd": "~/code/my-repo",
+      "slotDir": "~/code/pool/slot-{n}",
+      "slotPattern": "/pool/slot-\\d+$"
+    }
+  }
+}
