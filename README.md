@@ -78,7 +78,7 @@ Personal and work settings never go in this repo. The helper reads them from `~/
 | `name`, `about` | The greeting, and a line about you for the studio spirit. |
 | `slack.userId`, `slack.teamId`, `slack.teamHandle` | Your Slack mentions and your team group's pings. |
 | `deployDashboardUrl` | The link on the market calendar. |
-| `github.repo`, `github.reviewTeam` | Your PRs, deploy tags (`production-*`) and your team's review queue. |
+| `github.repo`, `github.reviewTeam`, `github.reviewBase` | Your PRs, deploy tags (`production-*`) and your team's review queue. Only PRs that target `reviewBase` (default `main`) show, so stacked PRs stay out. |
 | `sponge.repos`, `sponge.pool` | Which repos the sponge checks for worktrees, and an optional pool of dev slots with `pool-status.sh` and `slot-stop.sh` scripts. |
 
 `CLAY_GH` sets the path to `gh` if it is not in `/opt/homebrew/bin` or `/usr/local/bin`.

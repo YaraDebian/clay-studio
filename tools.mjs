@@ -240,12 +240,13 @@ async function mergedAwaitingDeploy() {
 
 async function githubPrs() {
   const REPO = await ghRepo(); const REVIEW_TEAM = (await config()).github?.reviewTeam;
+  const REVIEW_BASE = (await config()).github?.reviewBase || "main";   // skip stacked PRs that target another branch
   const [mine, toReview, merged] = await Promise.all([
     gh(["pr", "list", "-R", REPO, "--author", "@me", "--state", "open", "--limit", "20",
       "--json", "number,title,url,isDraft,reviewDecision,statusCheckRollup,updatedAt,mergeable,comments"]),
     // only my team's review queue plus reviews asked of me by name, not every team I belong to
     Promise.all([REVIEW_TEAM && `team-review-requested:${REVIEW_TEAM}`, "user-review-requested:@me"].filter(Boolean).map((q) =>
-      gh(["search", "prs", q, "--state=open", "--limit", "15", "--json", "number,title,url,repository,author,updatedAt"]).catch(() => [])))
+      gh(["search", "prs", q, "--state=open", "--base", REVIEW_BASE, "--limit", "15", "--json", "number,title,url,repository,author,updatedAt"]).catch(() => [])))
       .then((lists) => { const seen = new Set(); return lists.flat().filter((p) => !seen.has(p.url) && seen.add(p.url)).sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1)); }),
     mergedAwaitingDeploy().catch(() => ({ tag: null, awaiting: [], unknown: [] })),
   ]);
