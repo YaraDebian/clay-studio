@@ -4,7 +4,7 @@ import { promisify } from "node:util";
 import { readdir, stat, open, readFile, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 
 const run = promisify(execFile);
 const PROJECTS = join(homedir(), ".claude", "projects");
@@ -343,7 +343,8 @@ const CODE = join(homedir(), "code");
 async function spongeConfig() {
   const c = (await config()).sponge || {};
   const pool = c.pool && c.pool.scripts ? { scripts: home(c.pool.scripts), cwd: home(c.pool.cwd || CODE), slotDir: home(c.pool.slotDir || ""), slotPattern: new RegExp(c.pool.slotPattern || "$^") } : null;
-  return { repos: (c.repos || []).map(home).filter((r) => existsSync(join(r, ".git"))), pool };
+  const rebuildable = (c.rebuildable || ["node_modules", ".pnpm-store", "tmp", "log"]).filter((n) => /^[\w.-]+$/.test(n));
+  return { repos: (c.repos || []).map(home).filter((r) => existsSync(join(r, ".git"))), pool, rebuildable };
 }
 const DAY = 86_400_000;
 const BASH = existsSync("/opt/homebrew/bin/bash") ? "/opt/homebrew/bin/bash" : "bash";
@@ -407,13 +408,73 @@ async function nodeModules(dir) {
   return (out || "").split("\n").filter(Boolean);
 }
 
+const GB = 1024 ** 3;
+const PNPM = ["/opt/homebrew/bin/pnpm", join(homedir(), ".local/share/mise/shims/pnpm"), "/usr/local/bin/pnpm"].find((p) => existsSync(p));
+const parseSize = (t) => { const m = String(t || "").match(/([\d.]+)\s*([kKMGT]?B)/); if (!m) return 0; return parseFloat(m[1]) * { B: 1, kB: 1e3, KB: 1e3, MB: 1e6, GB: 1e9, TB: 1e12 }[m[2]]; };
+const unionBytes = async (paths) => { if (!paths.length) return 0; const out = await sh("/usr/bin/du", ["-sk", ...paths], { timeout: 120_000 }); return (out || "").split("\n").reduce((a, l) => a + (parseInt(l, 10) || 0) * 1024, 0); };
+
+// folders in an idle pool slot that git ignores and a package install brings back
+async function rebuildableDirs(dir, names) {
+  const found = [];
+  for (const n of names) for (const f of ((await sh("/usr/bin/find", [dir, "-maxdepth", "3", "-type", "d", "-name", n, "-prune"], { timeout: 60_000 })) || "").split("\n").filter(Boolean)) {
+    if (f.split("/").includes(".git")) continue;
+    try { await run("git", ["-C", dir, "check-ignore", "-q", f], { timeout: 10_000 }); found.push(f); } catch {}   // exit 0 only when git ignores it
+  }
+  return found.filter((f) => !found.some((o) => o !== f && f.startsWith(o + "/")));
+}
+
+async function dockerItems() {
+  if (!(await sh("docker", ["info", "--format", "{{.ServerVersion}}"], { timeout: 8_000, ...INFRA_ENV }))) {
+    const colima = existsSync(join(homedir(), ".colima")) ? (await sizeOf(join(homedir(), ".colima"))) : null;
+    return colima > 2 * GB ? [{ id: "skip:docker", kind: "kept", label: "Docker", detail: `not running · start it (for example colima start) and squeeze again to clean up to ${(colima / GB).toFixed(0)} GB`, safe: false, kept: true }] : [];
+  }
+  const rows = ((await sh("docker", ["system", "df", "--format", "{{json .}}"], { timeout: 30_000, ...INFRA_ENV })) || "").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+  const bytes = rows.filter((r) => r.Type !== "Local Volumes").reduce((a, r) => a + parseSize(r.Reclaimable), 0);
+  return bytes > .2 * GB ? [{ id: "docker", kind: "docker", label: "Docker: remove unused images and build cache", detail: "stopped containers, images no container uses and build cache · never touches volumes, so databases stay", bytes, safe: true }] : [];
+}
+
+async function simulatorItems() {
+  const raw = await sh("/usr/bin/xcrun", ["simctl", "list", "devices", "-j"], { timeout: 30_000 }); if (!raw) return [];
+  let devices; try { devices = JSON.parse(raw).devices; } catch { return []; }
+  const dir = join(homedir(), "Library", "Developer", "CoreSimulator", "Devices"); const drop = []; const seen = new Map();
+  for (const [runtime, list] of Object.entries(devices)) {
+    const sized = await Promise.all(list.map(async (d) => ({ ...d, mtime: (await stat(join(dir, d.udid)).catch(() => null))?.mtimeMs || 0 })));
+    for (const d of sized.sort((a, b) => b.mtime - a.mtime)) {
+      if (d.isAvailable === false) { drop.push(d); continue; }
+      const key = `${runtime}:${d.name}`; if (!seen.has(key)) { seen.set(key, d); continue; }   // keep the newest of each name
+      if (d.state === "Shutdown") drop.push(d);
+    }
+  }
+  if (!drop.length) return [];
+  const bytes = await unionBytes(drop.map((d) => join(dir, d.udid)).filter((p) => existsSync(p)));
+  return [{ id: `sims:${drop.map((d) => d.udid).join(",")}`, kind: "sims", label: `Simulators: delete ${drop.length} duplicate or unavailable`, detail: "keeps the newest simulator of each name · only ones that are shut down · Xcode makes them again when needed", bytes, safe: true }];
+}
+
+async function pnpmItem() {
+  if (!PNPM) return [];
+  const store = ((await sh(PNPM, ["store", "path"], { timeout: 20_000, cwd: homedir(), ...INFRA_ENV })) || "").trim();
+  if (!store || !existsSync(store)) return [];
+  const size = await sizeOf(store); const out = [];
+  const parent = dirname(store), cur = store.split("/").pop();
+  const old = []; for (const v of await readdir(parent).catch(() => [])) { if (!/^v\d+$/.test(v) || v === cur) continue; const st = await stat(join(parent, v)).catch(() => null); if (st && Date.now() - st.mtimeMs > 30 * DAY) old.push(v); }
+  if (old.length) out.push({ id: `pnpmold:${old.join(",")}`, kind: "pnpmold", label: `pnpm: delete old store versions (${old.join(", ")})`, detail: `pnpm ${cur} does not use them · a project that still needs one downloads its packages again`, bytes: await unionBytes(old.map((v) => join(parent, v))), safe: true });
+  if (size && size > GB) out.push({ id: "pnpm", kind: "pnpm", label: "pnpm: drop packages no project uses", detail: `the current store (${cur}) is ${(size / GB).toFixed(0)} GB · the saving depends on what is unused · it runs after the slot cleanup, so it can free more`, bytes: null, sizeText: "?", safe: true });
+  return out;
+}
+
 async function spongeItems() {
   const used = await inUsePaths(); const items = []; const { repos, pool: poolCfg } = await spongeConfig();
   // running services of pool slots nobody is working in: frees RAM, keeps everything else
   const pool = poolCfg ? JSON.parse((await sh(BASH, [join(poolCfg.scripts, "pool-status.sh")], { timeout: 90_000, cwd: poolCfg.cwd, ...INFRA_ENV })) || "{}") : {};
+  const { rebuildable } = await spongeConfig();
   for (const sl of pool.pool_slots || []) {
-    if (!sl.services_running) continue;
     const dir = poolCfg.slotDir.replace("{n}", sl.slot);
+    if (sl.status === "idle" && !sl.services_running && existsSync(dir) && !usedBy(used.all, dir) && !usedBy(used.all, dir + "-agent")) {
+      const dirs = await rebuildableDirs(dir, rebuildable);
+      const bytes = await unionBytes(dirs);
+      if (bytes > .2 * GB) items.push({ id: `slotclean:${sl.slot}`, kind: "slotclean", label: `Slot ${sl.slot}: clear rebuildable folders`, detail: `${sl.branch || "pool branch"} · ${dirs.length} folders git ignores (${[...new Set(dirs.map((d) => d.split("/").pop()))].join(", ")}) · your code and branch stay · an install brings them back`, bytes, safe: true, dirs });
+    }
+    if (!sl.services_running) continue;
     const busy = usedBy(used.people, dir) || usedBy(used.people, dir + "-agent");
     items.push({ id: `slot:${sl.slot}`, kind: "memory", label: `Stop slot ${sl.slot} services`, detail: `${sl.branch || "pool branch"} · frees about 3–4 GB of RAM · keeps the worktree, database and branch`, bytes: null, ram: true, safe: !busy, why: busy ? "a session seems to work in it" : "" });
   }
@@ -427,6 +488,7 @@ async function spongeItems() {
     else if (why !== "in use" && age >= 7 && (await nodeModules(w.path)).length) for (const nm of await nodeModules(w.path)) items.push({ id: `nm:${nm}`, kind: "modules", label: `Delete node_modules in ${w.path.split("/").pop()}`, detail: `${nm.replace(w.path, "") || "/node_modules"} · untouched ${age}d · pnpm install brings it back`, path: nm, safe: false });
     else items.push({ id: `skip:${w.path}`, kind: "kept", label: `Keep ${w.path.split("/").pop()}`, detail: why, bytes: null, safe: false, kept: true });
   }
+  items.push(...(await dockerItems()), ...(await simulatorItems()), ...(await pnpmItem()));
   const uniq = [...new Map(items.map((x) => [x.id, x])).values()];
   await Promise.all(uniq.map(async (x) => { if (x.path && x.bytes === undefined) x.bytes = await sizeOf(x.path); }));
   return uniq;
@@ -434,7 +496,7 @@ async function spongeItems() {
 
 async function spongeScan() {
   const items = await spongeItems();
-  return { items: items.map(({ path, repo, ...x }) => x), scannedAt: new Date().toISOString() };
+  return { items: items.map(({ path, repo, dirs, ...x }) => x), scannedAt: new Date().toISOString() };
 }
 
 async function spongeWipe({ ids = [] } = {}) {
@@ -448,6 +510,17 @@ async function spongeWipe({ ids = [] } = {}) {
       else if (x.kind === "worktree") await run("git", ["-C", x.repo, "worktree", "remove", x.path], { timeout: 180_000 });
       else if (x.kind === "modules") { if (!x.path.endsWith("/node_modules") || !(inside(x.path, CODE) || x.path.startsWith("/private/tmp/"))) throw new Error("unexpected path"); await rm(x.path, { recursive: true, force: true }); }
       else if (x.kind === "records") await run("git", ["-C", x.id.slice(6), "worktree", "prune"], { timeout: 60_000 });
+      else if (x.kind === "slotclean") {
+        const { pool: pc, rebuildable } = await spongeConfig(); const slotDir = pc.slotDir.replace("{n}", x.id.slice(10));
+        for (const d of x.dirs) { if (!inside(d, slotDir) || !rebuildable.includes(d.split("/").pop()) || d === slotDir) throw new Error("unexpected path"); await run("/bin/rm", ["-rf", d], { timeout: 1_200_000 }); }
+      }
+      else if (x.kind === "docker") { await run("docker", ["system", "prune", "-af"], { timeout: 1_200_000, ...INFRA_ENV }); }
+      else if (x.kind === "sims") { for (const id of x.id.slice(5).split(",")) if (/^[0-9A-F-]{36}$/.test(id)) await run("/usr/bin/xcrun", ["simctl", "delete", id], { timeout: 120_000 }); }
+      else if (x.kind === "pnpmold") {
+        const store = ((await sh(PNPM, ["store", "path"], { timeout: 20_000, cwd: homedir(), ...INFRA_ENV })) || "").trim(); const parent = dirname(store);
+        for (const v of x.id.slice(8).split(",")) if (/^v\d+$/.test(v) && v !== store.split("/").pop()) await run("/bin/rm", ["-rf", join(parent, v)], { timeout: 1_200_000 });
+      }
+      else if (x.kind === "pnpm") await run(PNPM, ["store", "prune"], { timeout: 1_200_000, cwd: homedir(), ...INFRA_ENV });
       results.push({ id: x.id, ok: true, bytes: x.bytes ?? null });
     } catch (e) { results.push({ id: x.id, ok: false, reason: String(e.stderr || e.message || e).split("\n")[0].slice(0, 200) }); }
   }

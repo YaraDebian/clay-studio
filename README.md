@@ -30,14 +30,19 @@ A cheeky **studio spirit** writes the plan card at the top left. It reads what i
 
 ![The sponge panel](docs/sponge.png)
 
-The sponge finds things that are safe to clean up:
+The sponge finds things that are safe to clean up, and shows each with its size:
 
-- Services of dev-pool slots that no session uses (if you set up a pool). It stops them (about 3–4 GB of RAM for each slot) and keeps the worktree, database and branch.
-- Worktrees whose work is all pushed and clean. It removes them with `git worktree remove`. The branches stay on GitHub.
-- `node_modules` in worktrees that you did not touch for 7 days (not ticked by default).
+- **Idle dev-pool slots** (if you set up a pool): services nobody uses (RAM), and the rebuildable folders inside a slot that no session or process is using (`node_modules`, `.pnpm-store`, `tmp`, `log`). It only deletes folders that git ignores, so your code, branches and uncommitted changes stay.
+- **Worktrees** whose work is all pushed and clean, removed with `git worktree remove`. The branches stay on GitHub.
+- **`node_modules`** in worktrees that you did not touch for 7 days (not ticked by default).
+- **Docker**: stopped containers, unused images and build cache. Never volumes, so databases stay. It only appears when Docker is running.
+- **Xcode simulators**: duplicates (it keeps the newest of each name) and unavailable ones, only when they are shut down.
+- **pnpm**: old store versions that the current pnpm no longer uses, and `pnpm store prune` for packages no project uses.
 - Records of worktrees whose folder is already gone.
 
-It never touches the main checkout, the pool slots themselves, unpushed or uncommitted work, or a folder that is open in cmux, used by a running process or used by a recent Claude session. It checks each item again just before it cleans.
+It never touches the main checkout, the pool slots themselves, unpushed or uncommitted work, or a folder that is open in cmux, used by a running process or used by a recent Claude session. It checks each item again just before it cleans. Big deletions can take a few minutes.
+
+Set `sponge.rebuildable` in your config to change which folder names count as rebuildable.
 
 ## How it works
 
@@ -85,7 +90,7 @@ Personal and work settings never go in this repo. The helper reads them from `~/
 | `slack.userId`, `slack.teamId`, `slack.teamHandle` | Your Slack mentions and your team group's pings. |
 | `deployDashboardUrl` | The link on the market calendar. |
 | `github.repo`, `github.reviewTeam`, `github.reviewBase` | Your PRs, deploy tags (`production-*`) and your team's review queue. Only PRs that target `reviewBase` (default `main`) show, so stacked PRs stay out. |
-| `sponge.repos`, `sponge.pool` | Which repos the sponge checks for worktrees, and an optional pool of dev slots with `pool-status.sh` and `slot-stop.sh` scripts. |
+| `sponge.repos`, `sponge.pool`, `sponge.rebuildable` | Which repos the sponge checks for worktrees, and an optional pool of dev slots with `pool-status.sh` and `slot-stop.sh` scripts. |
 
 `CLAY_GH` sets the path to `gh` if it is not in `/opt/homebrew/bin` or `/usr/local/bin`.
 

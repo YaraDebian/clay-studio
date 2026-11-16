@@ -1263,10 +1263,10 @@ button, input { font: inherit; color: inherit; }
       const box = el("button", "box"); box.type = "button"; box.setAttribute("aria-label", x.label); box.setAttribute("aria-pressed", String(spongeOn.has(x.id)));
       if (!x.kept && !x.why && !results) box.addEventListener("click", () => { spongeOn.has(x.id) ? spongeOn.delete(x.id) : spongeOn.add(x.id); renderSponge(); });
       const txt = el("span", "txt", x.label); txt.append(el("small", null, r && !r.ok ? `not wiped: ${r.reason}` : x.why ? `${x.detail} · kept: ${x.why}` : x.detail));
-      li.append(box, txt, el("span", "size", x.ram ? "RAM" : gb(x.bytes))); return li; };
+      li.append(box, txt, el("span", "size", x.ram ? "RAM" : x.sizeText || gb(x.bytes))); return li; };
     const wipeable = items.filter((x) => !x.kept), kept = items.filter((x) => x.kept);
     const nodes = wipeable.length ? wipeable.map(row) : [el("li", "empty", "nothing to wipe · the studio is already tidy")];
-    if (kept.length) nodes.push(el("h3", null, "Kept · still in use or not pushed"), ...kept.map(row));
+    if (kept.length) nodes.push(el("h3", null, "Left alone"), ...kept.map(row));
     $("spongeItems").replaceChildren(...nodes);
     const pick = wipeable.filter((x) => spongeOn.has(x.id)); const total = pick.reduce((a, x) => a + (x.bytes || 0), 0); const ram = pick.some((x) => x.ram);
     if (results) { const freed = results.filter((r) => r.ok).reduce((a, r) => a + (r.bytes || 0), 0); $("spongeNote").textContent = `${results.filter((r) => r.ok).length} wiped · ${gb(freed) || "0 MB"} of disk freed`; $("spongeGo").hidden = true; return; }
@@ -1274,7 +1274,7 @@ button, input { font: inherit; color: inherit; }
     $("spongeGo").hidden = !pick.length; $("spongeGo").textContent = `Wipe ${pick.length}${total ? " · " + gb(total) : ""}${ram ? " + RAM" : ""}`;
   }
   $("spongeGo").addEventListener("click", async () => {
-    const ids = [...spongeOn]; if (!ids.length) return; $("spongeGo").disabled = true; $("spongeGo").textContent = "wiping…"; sponge.userData.squish = 1;
+    const ids = [...spongeOn]; if (!ids.length) return; $("spongeGo").disabled = true; $("spongeGo").textContent = "wiping…"; $("spongeNote").textContent = "Deleting big folders can take a few minutes. Keep this open."; sponge.userData.squish = 1;
     try { const res = (await S.mcp.callTool(HOST, "sponge_wipe", { ids }, { cache: false })).payload || { results: [] }; renderSponge(res.results);
       const freed = res.results.filter((r) => r.ok).reduce((a, r) => a + (r.bytes || 0), 0); toast(freed ? `squeaky clean · ${gb(freed)} freed` : "squeaky clean"); }
     catch (e) { $("spongeNote").textContent = e?.code === "cancelled" ? "okay, nothing wiped" : `could not wipe (${e?.code || "error"})`; }
