@@ -1,10 +1,10 @@
 // Clay Studio local MCP server: exposes recent Claude Code sessions and GitHub PRs over stdio.
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { readdir, stat, open, readFile, rm } from "node:fs/promises";
+import { readdir, stat, open, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { homedir } from "node:os";
-import { join, dirname } from "node:path";
+import { homedir, tmpdir } from "node:os";
+import { join, dirname, basename } from "node:path";
 
 const run = promisify(execFile);
 const PROJECTS = join(homedir(), ".claude", "projects");
@@ -81,8 +81,14 @@ const TOOLS = [
     annotations: { readOnlyHint: true },
   },
   {
+    name: "sponge_status",
+    description: "Progress of the running (or last) sponge cleanup.",
+    inputSchema: { type: "object", properties: {} },
+    annotations: { readOnlyHint: true },
+  },
+  {
     name: "sponge_wipe",
-    description: "Clean up the given items from sponge_scan. Each item is checked again first; anything no longer safe is skipped.",
+    description: "Start cleaning up the given items from sponge_scan. It runs in the background; read progress with sponge_status. Each item is checked again first; anything no longer safe is skipped.",
     inputSchema: { type: "object", properties: { ids: { type: "array", items: { type: "string" }, description: "Item ids from sponge_scan." } }, required: ["ids"] },
   },
 ];
@@ -409,7 +415,8 @@ async function nodeModules(dir) {
 }
 
 const GB = 1024 ** 3;
-const PNPM = ["/opt/homebrew/bin/pnpm", join(homedir(), ".local/share/mise/shims/pnpm"), "/usr/local/bin/pnpm"].find((p) => existsSync(p));
+const PNPM_BINS = [join(homedir(), ".local/share/mise/shims/pnpm"), "/opt/homebrew/bin/pnpm", "/usr/local/bin/pnpm"].filter((p) => existsSync(p));   // the mise shim first: it picks the pnpm your projects pin
+const PNPM = PNPM_BINS[0];
 const parseSize = (t) => { const m = String(t || "").match(/([\d.]+)\s*([kKMGT]?B)/); if (!m) return 0; return parseFloat(m[1]) * { B: 1, kB: 1e3, KB: 1e3, MB: 1e6, GB: 1e9, TB: 1e12 }[m[2]]; };
 const unionBytes = async (paths) => { if (!paths.length) return 0; const out = await sh("/usr/bin/du", ["-sk", ...paths], { timeout: 120_000 }); return (out || "").split("\n").reduce((a, l) => a + (parseInt(l, 10) || 0) * 1024, 0); };
 
@@ -450,22 +457,27 @@ async function simulatorItems() {
   return [{ id: `sims:${drop.map((d) => d.udid).join(",")}`, kind: "sims", label: `Simulators: delete ${drop.length} duplicate or unavailable`, detail: "keeps the newest simulator of each name · only ones that are shut down · Xcode makes them again when needed", bytes, safe: true }];
 }
 
+async function pnpmStores() {
+  const { repos, pool } = await spongeConfig(); const cwd = repos[0] || pool?.cwd || homedir(); const out = [];
+  for (const bin of PNPM_BINS) { const p = ((await sh(bin, ["store", "path"], { timeout: 20_000, cwd, ...INFRA_ENV })) || "").trim(); if (p && existsSync(p) && !out.some((o) => o.path === p)) out.push({ bin, path: p }); }
+  return out;
+}
 async function pnpmItem() {
-  if (!PNPM) return [];
-  const store = ((await sh(PNPM, ["store", "path"], { timeout: 20_000, cwd: homedir(), ...INFRA_ENV })) || "").trim();
-  if (!store || !existsSync(store)) return [];
-  const size = await sizeOf(store); const out = [];
-  const parent = dirname(store), cur = store.split("/").pop();
-  const old = []; for (const v of await readdir(parent).catch(() => [])) { if (!/^v\d+$/.test(v) || v === cur) continue; const st = await stat(join(parent, v)).catch(() => null); if (st && Date.now() - st.mtimeMs > 30 * DAY) old.push(v); }
-  if (old.length) out.push({ id: `pnpmold:${old.join(",")}`, kind: "pnpmold", label: `pnpm: delete old store versions (${old.join(", ")})`, detail: `pnpm ${cur} does not use them · a project that still needs one downloads its packages again`, bytes: await unionBytes(old.map((v) => join(parent, v))), safe: true });
-  if (size && size > GB) out.push({ id: "pnpm", kind: "pnpm", label: "pnpm: drop packages no project uses", detail: `the current store (${cur}) is ${(size / GB).toFixed(0)} GB · the saving depends on what is unused · it runs after the slot cleanup, so it can free more`, bytes: null, sizeText: "?", safe: true });
+  const stores = await pnpmStores(); if (!stores.length) return [];
+  const main = stores[0], parent = dirname(main.path), cur = basename(main.path); const inUse = new Set(stores.filter((x) => dirname(x.path) === parent).map((x) => basename(x.path)));
+  const size = await sizeOf(main.path); const out = [];
+  const old = []; for (const v of await readdir(parent).catch(() => [])) { if (!/^v\d+$/.test(v) || inUse.has(v)) continue; const st = await stat(join(parent, v)).catch(() => null); if (st && Date.now() - st.mtimeMs > 30 * DAY) old.push(v); }
+  if (old.length) out.push({ id: `pnpmold:${old.join(",")}`, kind: "pnpmold", label: `pnpm: delete old store versions (${old.join(", ")})`, detail: `no pnpm on this Mac uses them (they use ${[...inUse].join(", ")}) · a project that still needs one downloads its packages again`, bytes: await unionBytes(old.map((v) => join(parent, v))), safe: true });
+  if (size && size > GB) out.push({ id: "pnpm", kind: "pnpm", label: "pnpm: drop packages no project uses", detail: `your projects' store (${cur}) is ${(size / GB).toFixed(0)} GB · the saving depends on what is unused · it runs after the slot cleanup, so it can free more`, bytes: null, sizeText: "?", safe: true });
   return out;
 }
 
-async function spongeItems() {
+// `want`: when cleaning, only the parts that hold the chosen items are looked at again (a full scan takes about a minute)
+async function spongeItems(want) {
+  const needs = (...prefixes) => !want || [...want].some((id) => prefixes.some((p) => id.startsWith(p)));
   const used = await inUsePaths(); const items = []; const { repos, pool: poolCfg } = await spongeConfig();
   // running services of pool slots nobody is working in: frees RAM, keeps everything else
-  const pool = poolCfg ? JSON.parse((await sh(BASH, [join(poolCfg.scripts, "pool-status.sh")], { timeout: 90_000, cwd: poolCfg.cwd, ...INFRA_ENV })) || "{}") : {};
+  const pool = poolCfg && needs("slot") ? JSON.parse((await sh(BASH, [join(poolCfg.scripts, "pool-status.sh")], { timeout: 90_000, cwd: poolCfg.cwd, ...INFRA_ENV })) || "{}") : {};
   const { rebuildable } = await spongeConfig();
   for (const sl of pool.pool_slots || []) {
     const dir = poolCfg.slotDir.replace("{n}", sl.slot);
@@ -479,7 +491,7 @@ async function spongeItems() {
     items.push({ id: `slot:${sl.slot}`, kind: "memory", label: `Stop slot ${sl.slot} services`, detail: `${sl.branch || "pool branch"} · frees about 3–4 GB of RAM · keeps the worktree, database and branch`, bytes: null, ram: true, safe: !busy, why: busy ? "a session seems to work in it" : "" });
   }
   // worktrees whose work is all pushed and that nothing has open
-  for (const repo of repos) for (const w of await worktrees(repo)) {
+  for (const repo of needs("wt:", "nm:", "prune:", "skip:") ? repos : []) for (const w of await worktrees(repo)) {
     if (w.prunable || !existsSync(w.path)) { items.push({ id: `prune:${repo}`, kind: "records", label: `Forget missing worktrees (${repo.split("/").pop()})`, detail: "git worktree prune · folder already gone", bytes: 0, safe: true }); continue; }
     const why = await worktreeSafety(w, used, poolCfg);
     if (why === "pool slot" || why === "locked") continue;
@@ -488,7 +500,7 @@ async function spongeItems() {
     else if (why !== "in use" && age >= 7 && (await nodeModules(w.path)).length) for (const nm of await nodeModules(w.path)) items.push({ id: `nm:${nm}`, kind: "modules", label: `Delete node_modules in ${w.path.split("/").pop()}`, detail: `${nm.replace(w.path, "") || "/node_modules"} · untouched ${age}d · pnpm install brings it back`, path: nm, safe: false });
     else items.push({ id: `skip:${w.path}`, kind: "kept", label: `Keep ${w.path.split("/").pop()}`, detail: why, bytes: null, safe: false, kept: true });
   }
-  items.push(...(await dockerItems()), ...(await simulatorItems()), ...(await pnpmItem()));
+  items.push(...(needs("docker", "skip:docker") ? await dockerItems() : []), ...(needs("sims:") ? await simulatorItems() : []), ...(needs("pnpm") ? await pnpmItem() : []));
   const uniq = [...new Map(items.map((x) => [x.id, x])).values()];
   await Promise.all(uniq.map(async (x) => { if (x.path && x.bytes === undefined) x.bytes = await sizeOf(x.path); }));
   return uniq;
@@ -499,33 +511,54 @@ async function spongeScan() {
   return { items: items.map(({ path, repo, dirs, ...x }) => x), scannedAt: new Date().toISOString() };
 }
 
+const JOB_FILE = join(tmpdir(), "clayday-sponge-job.json");
+async function readJob() {
+  try { const job = JSON.parse(await readFile(JOB_FILE, "utf8"));
+    if (job.running) { try { process.kill(job.pid, 0); } catch { job.running = false; job.interrupted = true; } }   // the process that ran it is gone
+    return job; } catch { return { running: false }; }
+}
+const saveJob = (job) => writeFile(JOB_FILE, JSON.stringify(job)).catch(() => {});
+
+// starts the cleanup in the background and answers at once: big deletions take minutes, longer than a tool call may wait
 async function spongeWipe({ ids = [] } = {}) {
+  const now = await readJob(); if (now.running) return now;
   const want = new Set((Array.isArray(ids) ? ids : []).map(String));
-  const fresh = await spongeItems(); const results = [];
-  for (const x of fresh) {
-    if (!want.has(x.id) || x.kept) continue;
-    if (x.why) { results.push({ id: x.id, ok: false, reason: x.why }); continue; }
+  const job = { running: true, pid: process.pid, startedAt: Date.now(), total: want.size, current: "checking what is still safe", results: [] }; await saveJob(job);
+  (async () => {
     try {
-      if (x.kind === "memory") { const { pool: pc } = await spongeConfig(); await run(BASH, [join(pc.scripts, "slot-stop.sh"), x.id.slice(5)], { timeout: 120_000, cwd: pc.cwd, ...INFRA_ENV }); }
-      else if (x.kind === "worktree") await run("git", ["-C", x.repo, "worktree", "remove", x.path], { timeout: 180_000 });
-      else if (x.kind === "modules") { if (!x.path.endsWith("/node_modules") || !(inside(x.path, CODE) || x.path.startsWith("/private/tmp/"))) throw new Error("unexpected path"); await rm(x.path, { recursive: true, force: true }); }
-      else if (x.kind === "records") await run("git", ["-C", x.id.slice(6), "worktree", "prune"], { timeout: 60_000 });
-      else if (x.kind === "slotclean") {
-        const { pool: pc, rebuildable } = await spongeConfig(); const slotDir = pc.slotDir.replace("{n}", x.id.slice(10));
-        for (const d of x.dirs) { if (!inside(d, slotDir) || !rebuildable.includes(d.split("/").pop()) || d === slotDir) throw new Error("unexpected path"); await run("/bin/rm", ["-rf", d], { timeout: 1_200_000 }); }
+      const fresh = await spongeItems(want);
+      for (const x of fresh) {
+        if (!want.has(x.id) || x.kept) continue;
+        job.current = x.label; await saveJob(job);
+        if (x.why) { job.results.push({ id: x.id, ok: false, reason: x.why }); continue; }
+        try { await runWipeItem(x); job.results.push({ id: x.id, ok: true, bytes: x.bytes ?? null }); }
+        catch (e) { job.results.push({ id: x.id, ok: false, reason: String(e.stderr || e.message || e).split("\n")[0].slice(0, 200) }); }
+        await saveJob(job);
       }
-      else if (x.kind === "docker") { await run("docker", ["system", "prune", "-af"], { timeout: 1_200_000, ...INFRA_ENV }); }
-      else if (x.kind === "sims") { for (const id of x.id.slice(5).split(",")) if (/^[0-9A-F-]{36}$/.test(id)) await run("/usr/bin/xcrun", ["simctl", "delete", id], { timeout: 120_000 }); }
-      else if (x.kind === "pnpmold") {
-        const store = ((await sh(PNPM, ["store", "path"], { timeout: 20_000, cwd: homedir(), ...INFRA_ENV })) || "").trim(); const parent = dirname(store);
-        for (const v of x.id.slice(8).split(",")) if (/^v\d+$/.test(v) && v !== store.split("/").pop()) await run("/bin/rm", ["-rf", join(parent, v)], { timeout: 1_200_000 });
-      }
-      else if (x.kind === "pnpm") await run(PNPM, ["store", "prune"], { timeout: 1_200_000, cwd: homedir(), ...INFRA_ENV });
-      results.push({ id: x.id, ok: true, bytes: x.bytes ?? null });
-    } catch (e) { results.push({ id: x.id, ok: false, reason: String(e.stderr || e.message || e).split("\n")[0].slice(0, 200) }); }
-  }
-  for (const id of want) if (!results.some((r) => r.id === id)) results.push({ id, ok: false, reason: "no longer safe or already gone" });
-  return { results };
+      for (const id of want) if (!job.results.some((r) => r.id === id)) job.results.push({ id, ok: false, reason: "no longer safe or already gone" });
+    } catch (e) { job.error = String(e.message || e).slice(0, 200); }
+    job.running = false; job.current = null; job.finishedAt = Date.now(); await saveJob(job);
+  })();
+  return job;
+}
+async function spongeStatus() { return readJob(); }
+
+async function runWipeItem(x) {
+    if (x.kind === "memory") { const { pool: pc } = await spongeConfig(); await run(BASH, [join(pc.scripts, "slot-stop.sh"), x.id.slice(5)], { timeout: 120_000, cwd: pc.cwd, ...INFRA_ENV }); }
+    else if (x.kind === "worktree") await run("git", ["-C", x.repo, "worktree", "remove", x.path], { timeout: 180_000 });
+    else if (x.kind === "modules") { if (!x.path.endsWith("/node_modules") || !(inside(x.path, CODE) || x.path.startsWith("/private/tmp/"))) throw new Error("unexpected path"); await rm(x.path, { recursive: true, force: true }); }
+    else if (x.kind === "records") await run("git", ["-C", x.id.slice(6), "worktree", "prune"], { timeout: 60_000 });
+    else if (x.kind === "slotclean") {
+      const { pool: pc, rebuildable } = await spongeConfig(); const slotDir = pc.slotDir.replace("{n}", x.id.slice(10));
+      for (const d of x.dirs) { if (!inside(d, slotDir) || !rebuildable.includes(d.split("/").pop()) || d === slotDir) throw new Error("unexpected path"); await run("/bin/rm", ["-rf", d], { timeout: 1_200_000 }); }
+    }
+    else if (x.kind === "docker") { await run("docker", ["system", "prune", "-af"], { timeout: 1_200_000, ...INFRA_ENV }); }
+    else if (x.kind === "sims") { for (const id of x.id.slice(5).split(",")) if (/^[0-9A-F-]{36}$/.test(id)) await run("/usr/bin/xcrun", ["simctl", "delete", id], { timeout: 120_000 }); }
+    else if (x.kind === "pnpmold") {
+      const stores = await pnpmStores(); const parent = dirname(stores[0].path); const inUse = new Set(stores.map((o) => basename(o.path)));
+      for (const v of x.id.slice(8).split(",")) if (/^v\d+$/.test(v) && !inUse.has(v)) await run("/bin/rm", ["-rf", join(parent, v)], { timeout: 1_200_000 });
+    }
+    else if (x.kind === "pnpm") { const st = (await pnpmStores())[0]; const { repos, pool } = await spongeConfig(); await run(st.bin, ["store", "prune"], { timeout: 1_200_000, cwd: repos[0] || pool?.cwd || homedir(), ...INFRA_ENV }); }
 }
 
 // artifacts published from Claude Code on this Mac, read from the publish lines in local transcripts
@@ -568,6 +601,6 @@ async function studioConfig() {
   return { name: c.name || "", about: c.about || "", slack: { userId: c.slack?.userId || "", teamId: c.slack?.teamId || "", teamHandle: c.slack?.teamHandle || "" }, deployDashboardUrl: c.deployDashboardUrl || "" };
 }
 
-const HANDLERS = { my_artifacts: myArtifacts, studio_config: studioConfig, claude_sessions: claudeSessions, github_prs: githubPrs, open_session: openSession, close_session: closeSession, sponge_scan: spongeScan, sponge_wipe: spongeWipe };
+const HANDLERS = { my_artifacts: myArtifacts, studio_config: studioConfig, claude_sessions: claudeSessions, github_prs: githubPrs, open_session: openSession, close_session: closeSession, sponge_scan: spongeScan, sponge_wipe: spongeWipe, sponge_status: spongeStatus };
 
 export { TOOLS, HANDLERS };

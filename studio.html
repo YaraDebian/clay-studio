@@ -1251,7 +1251,9 @@ button, input { font: inherit; color: inherit; }
   async function openSponge() {
     $("spongeList").hidden = false; $("scrim").hidden = false; $("spongeClose").focus({ preventScroll: true });
     if (!S.mcp) { $("spongeItems").replaceChildren(el("li", "empty", "open this page in the Claude app to use the sponge")); $("spongeGo").hidden = true; $("spongeNote").textContent = ""; return; }
-    $("spongeItems").replaceChildren(el("li", "empty", "squeezing the sponge… checking slots and worktrees (about 20 seconds)")); $("spongeGo").hidden = true; $("spongeNote").textContent = "";
+    try { const job = (await S.mcp.callTool(HOST, "sponge_status", {}, { cache: false })).payload || {};
+      if (job.running) { spongeBusy = true; $("spongeItems").replaceChildren(el("li", "empty", "a cleanup is running…")); showSpongeJob(job); pollSponge(); return; } } catch {}
+    $("spongeItems").replaceChildren(el("li", "empty", "squeezing the sponge… checking slots, worktrees, Docker and caches (about a minute)")); $("spongeGo").hidden = true; $("spongeNote").textContent = "";
     try {
       spongeScan = (await S.mcp.callTool(HOST, "sponge_scan", {}, { cache: false })).payload || { items: [] };
       spongeOn.clear(); spongeScan.items.filter((x) => x.safe && !x.kept).forEach((x) => spongeOn.add(x.id)); renderSponge();
@@ -1261,7 +1263,7 @@ button, input { font: inherit; color: inherit; }
     const items = spongeScan?.items || []; const done = new Map((results || []).map((r) => [r.id, r]));
     const row = (x) => { const r = done.get(x.id); const li = el("li", x.kept || (!x.safe && x.why) ? "kept" : r?.ok ? "gone" : spongeOn.has(x.id) ? "on" : "");
       const box = el("button", "box"); box.type = "button"; box.setAttribute("aria-label", x.label); box.setAttribute("aria-pressed", String(spongeOn.has(x.id)));
-      if (!x.kept && !x.why && !results) box.addEventListener("click", () => { spongeOn.has(x.id) ? spongeOn.delete(x.id) : spongeOn.add(x.id); renderSponge(); });
+      if (!x.kept && !x.why && !results && !spongeBusy) box.addEventListener("click", () => { spongeOn.has(x.id) ? spongeOn.delete(x.id) : spongeOn.add(x.id); renderSponge(); });
       const txt = el("span", "txt", x.label); txt.append(el("small", null, r && !r.ok ? `not wiped: ${r.reason}` : x.why ? `${x.detail} · kept: ${x.why}` : x.detail));
       li.append(box, txt, el("span", "size", x.ram ? "RAM" : x.sizeText || gb(x.bytes))); return li; };
     const wipeable = items.filter((x) => !x.kept), kept = items.filter((x) => x.kept);
@@ -1273,12 +1275,34 @@ button, input { font: inherit; color: inherit; }
     $("spongeNote").textContent = pick.length ? `Worktrees go, their branches stay on GitHub.` : "Tick what to wipe.";
     $("spongeGo").hidden = !pick.length; $("spongeGo").textContent = `Wipe ${pick.length}${total ? " · " + gb(total) : ""}${ram ? " + RAM" : ""}`;
   }
+  let spongeBusy = false, spongePoll = null;
+  function showSpongeJob(job) {
+    const n = job.results?.length || 0;
+    $("spongeNote").textContent = `Wiping ${Math.min(n + 1, job.total || 1)} of ${job.total || 1}${job.current ? " · " + job.current : ""}. Big folders take a few minutes; you can close this and come back.`;
+    $("spongeGo").hidden = false; $("spongeGo").disabled = true; $("spongeGo").textContent = "wiping…";
+  }
+  async function pollSponge(misses = 0) {
+    clearTimeout(spongePoll);
+    try {
+      const job = (await S.mcp.callTool(HOST, "sponge_status", {}, { cache: false })).payload || {};
+      if (job.running) { spongeBusy = true; showSpongeJob(job); spongePoll = setTimeout(() => pollSponge(0), 2500); return; }
+      spongeBusy = false; $("spongeGo").disabled = false;
+      if (job.results?.length) {
+        renderSponge(job.results); const freed = job.results.filter((r) => r.ok).reduce((a, r) => a + (r.bytes || 0), 0);
+        if (job.interrupted) $("spongeNote").textContent = `The helper stopped partway: ${job.results.filter((r) => r.ok).length} wiped. Squeeze the sponge again to see what is left.`;
+        toast(freed ? `squeaky clean · ${gb(freed)} freed` : "squeaky clean");
+      } else renderSponge();
+    } catch (e) {
+      if (misses < 8) { spongePoll = setTimeout(() => pollSponge(misses + 1), 3000); return; }
+      spongeBusy = false; $("spongeGo").disabled = false; renderSponge();
+      $("spongeNote").textContent = "I lost contact with the helper. The cleanup may still be running: squeeze the sponge again in a few minutes.";
+    }
+  }
   $("spongeGo").addEventListener("click", async () => {
-    const ids = [...spongeOn]; if (!ids.length) return; $("spongeGo").disabled = true; $("spongeGo").textContent = "wiping…"; $("spongeNote").textContent = "Deleting big folders can take a few minutes. Keep this open."; sponge.userData.squish = 1;
-    try { const res = (await S.mcp.callTool(HOST, "sponge_wipe", { ids }, { cache: false })).payload || { results: [] }; renderSponge(res.results);
-      const freed = res.results.filter((r) => r.ok).reduce((a, r) => a + (r.bytes || 0), 0); toast(freed ? `squeaky clean · ${gb(freed)} freed` : "squeaky clean"); }
-    catch (e) { $("spongeNote").textContent = e?.code === "cancelled" ? "okay, nothing wiped" : `could not wipe (${e?.code || "error"})`; }
-    finally { $("spongeGo").disabled = false; }
+    const ids = [...spongeOn]; if (!ids.length || spongeBusy) return; spongeBusy = true; renderSponge(); sponge.userData.squish = 1;
+    $("spongeGo").hidden = false; $("spongeGo").disabled = true; $("spongeGo").textContent = "wiping…";
+    try { const job = (await S.mcp.callTool(HOST, "sponge_wipe", { ids }, { cache: false })).payload || {}; showSpongeJob(job); pollSponge(); }
+    catch (e) { spongeBusy = false; $("spongeGo").disabled = false; renderSponge(); $("spongeNote").textContent = e?.code === "cancelled" ? "okay, nothing wiped" : `could not start the cleanup (${e?.code || "error"})`; }
   });
   function openJar() { renderDoneList(); $("jarList").hidden = false; $("scrim").hidden = false; $("jarClose").focus({ preventScroll: true }); }
   function closeJar() { $("jarList").hidden = true; $("scrim").hidden = true; }

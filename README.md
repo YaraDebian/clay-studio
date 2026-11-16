@@ -40,7 +40,7 @@ The sponge finds things that are safe to clean up, and shows each with its size:
 - **pnpm**: old store versions that the current pnpm no longer uses, and `pnpm store prune` for packages no project uses.
 - Records of worktrees whose folder is already gone.
 
-It never touches the main checkout, the pool slots themselves, unpushed or uncommitted work, or a folder that is open in cmux, used by a running process or used by a recent Claude session. It checks each item again just before it cleans. Big deletions can take a few minutes.
+It never touches the main checkout, the pool slots themselves, unpushed or uncommitted work, or a folder that is open in cmux, used by a running process or used by a recent Claude session. It checks each item again just before it cleans. The cleanup runs in the background and the panel shows its progress, so big deletions can take minutes.
 
 Set `sponge.rebuildable` in your config to change which folder names count as rebuildable.
 
@@ -50,7 +50,7 @@ Set `sponge.rebuildable` in your config to change which folder names count as re
 studio.html   the artifact: scene, UI and data loading
 server.mjs    stdio MCP server; it only loads tools.mjs again when that file changes
 tools.mjs     the helper's tools: studio_config, my_artifacts, claude_sessions, github_prs, open_session,
-              close_session, sponge_scan, sponge_wipe
+              close_session, sponge_scan, sponge_wipe, sponge_status
 video/        the showcase video (HyperFrames) and its capture rig
 ```
 
