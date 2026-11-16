@@ -1,6 +1,10 @@
 {
   "name": "Sam",
   "about": "a software engineer",
+  "location": {
+    "lat": 41.4,
+    "lon": 2.17
+  },
   "slack": {
     "userId": "U0123456789",
     "teamId": "S0123456789",
