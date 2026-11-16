@@ -722,6 +722,8 @@ button, input { font: inherit; color: inherit; }
   const buildKeys = () => { try { [SR, SS] = sunTimes(new Date()); } catch (e) {} if (!(SS > SR)) { SR = 7; SS = 19.25; }
     return [[0, NIGHT], [SR - 1.5, NIGHT], [SR, DAWN], [SR + 2.5, DAY], [SS - 2, DAY], [SS - .75, GOLDEN], [SS + .5, DUSK], [SS + 1.75, NIGHT], [24, NIGHT]]; };
   let KEYS = buildKeys();
+  let hourOverride = null;
+  const clockHour = () => { if (hourOverride != null) return hourOverride; const d = new Date(); return d.getHours() + d.getMinutes() / 60; };
   function stateAt(h) {
     let i = 0; while (i < KEYS.length - 2 && h >= KEYS[i + 1][0]) i++;
     const [h0, a] = KEYS[i], [h1, b] = KEYS[i + 1]; const t = h1 > h0 ? Math.min(1, Math.max(0, (h - h0) / (h1 - h0))) : 0;
