@@ -229,7 +229,7 @@ async function mergedAwaitingDeploy() {
   const REPO = await ghRepo();
   const since = Date.now() - 7 * 86_400_000;
   const [merged, tag] = await Promise.all([
-    gh(["pr", "list", "-R", REPO, "--author", "@me", "--state", "merged", "--limit", "15", "--json", "number,title,url,mergedAt,mergeCommit"]),
+    gh(["pr", "list", "-R", REPO, "--author", "@me", "--state", "merged", "--base", (await config()).github?.reviewBase || "main", "--limit", "15", "--json", "number,title,url,mergedAt,mergeCommit"]),
     latestProductionTag(),
   ]);
   const recent = merged.filter((p) => p.mergedAt && new Date(p.mergedAt).getTime() >= since && p.mergeCommit?.oid);
