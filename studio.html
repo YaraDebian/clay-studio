@@ -286,7 +286,7 @@ button, input { font: inherit; color: inherit; }
   const hi = (word) => `${word}${CFG.name ? " " + CFG.name : ""}, `;
   const who = () => CFG.name || "the owner";
   const HOST = "host:clay-studio";
-  const POINTS = { meeting: 5, slack: 10, pr: 15, session: 15, sketch: 20, note: 10 };
+  const POINTS = { meeting: 5, slack: 10, pr: 15, session: 15, sketch: 20, note: 10, mail: 10 };
   const STICKY = { butter: "#FBE9A8", pink: "#FBD0DC", mint: "#CFEFDD", lilac: "#E0D4F7" };
   const LEVELS = [[0, "Clay Kid"], [100, "Pinch-pot Pro"], [300, "Coil Queen"], [700, "Loop-tool Legend"], [1500, "Studio Master"]];
   const CLAY = { pink: 0xF2A2BC, lilac: 0xBFA8F0, butter: 0xFAD47A, mint: 0x96D9B9, peach: 0xF7AE88, rose: 0xE8798F, paper: 0xFFFDF8, wet: 0xA08A93 };
@@ -305,7 +305,7 @@ button, input { font: inherit; color: inherit; }
   const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const finePointer = matchMedia("(pointer: fine)").matches;
 
-  const S = { data: { meetings: null, slack: null, sessions: null, prs: null }, progress: { points: 0, days: {} }, sketch: [], myNotes: [], mcp: null, sample: null, db: null, uid: null, notes: {} };
+  const S = { data: { meetings: null, slack: null, mail: null, sessions: null, prs: null }, progress: { points: 0, days: {} }, sketch: [], myNotes: [], mcp: null, sample: null, db: null, uid: null, notes: {} };
   const doneToday = () => new Set(S.progress.days?.[dayKey()] || []);
   function slackThreadKey(url) {
     const m = String(url || "").match(/\/archives\/([A-Z0-9]+)\/p(\d{10})(\d{6})/); if (!m) return `slack:${url}`;
@@ -936,9 +936,9 @@ button, input { font: inherit; color: inherit; }
     clearGroup("notes");
     const done = doneEver();
     const mine = S.myNotes.filter((n) => !n.doneAt).slice(0, 6).map((n) => ({ mine: true, id: n.id, ask: n.text, color: n.color, createdAt: n.createdAt }));
-    const items = [...mine, ...(S.data.slack || []).filter((m) => !slackDone(done, m))].slice(0, 8);
+    const items = [...mine, ...(S.data.slack || []).filter((m) => !slackDone(done, m)), ...(S.data.mail || []).filter((m) => !done.has(`mail:${m.id}`))].slice(0, 8);
     items.forEach((m, i) => {
-      const key = m.mine ? `note:${m.id}` : slackThreadKey(m.permalink); const isDone = false;
+      const key = m.mine ? `note:${m.id}` : m.mail ? `mail:${m.id}` : slackThreadKey(m.permalink); const isDone = false;
       const g = new T.Group();
       const paper = new T.Mesh(curlPaper(new T.PlaneGeometry(1.62, 1.5, 10, 10), key), toonMat({ map: noteTexture(m, isDone), roughness: .95, transparent: isDone, opacity: isDone ? .55 : 1 }));
       paper.castShadow = true; g.add(paper);
@@ -948,6 +948,8 @@ button, input { font: inherit; color: inherit; }
       g.rotation.z = (rnd(key, 1) - .5) * (isDone ? .5 : .16);
       if (m.mine) g.userData.info = { key, kind: "note", kindLabel: "Your sticky note", title: m.ask, goLabel: "Throw it away", onGo: () => throwNote(m.id),
         meta: [["Note to self", "soft"], m.createdAt ? [`pinned ${ago(m.createdAt)}`] : null] };
+      else if (m.mail) g.userData.info = { key, kind: "mail", kindLabel: "Email note", title: m.ask, href: m.permalink, goLabel: "Open in Gmail",
+        meta: [["Unread", "warn"], [`${m.who || "Someone"} · Email`], m.time ? [ago(m.time)] : null], text: m.summary };
       else g.userData.info = { key, kind: "slack", kindLabel: "Slack note", title: m.ask || m.summary, href: m.permalink, goLabel: "Open in Slack",
         meta: [[m.urgency === "now" ? "Now" : m.urgency === "today" ? "Today" : "Whenever", m.urgency === "now" ? "bad" : m.urgency === "today" ? "warn" : "ok"], [`${m.who || "Someone"} · ${m.where || ""}`], m.time ? [String(m.time).replace(/:\d\d (CET|CEST)$/, "")] : null],
         text: m.ask ? m.summary : "" };
@@ -1529,6 +1531,17 @@ button, input { font: inherit; color: inherit; }
       return { channel: g(/Channel:\s*(.+?)\s*\(ID/), participants: g(/Participants:\s*(.+)/), from: g(/From:\s*([^<\n]+?)\s*</), fromId: g(/From:.*?\(ID:\s*(\w+)\)/),
         time: g(/Time:\s*(.+)/), permalink: g(/Permalink:\s*\[link\]\((.+?)\)/), text: ((b.split(/\nText:\s*\n/)[1] || "").split(/\n---/)[0].trim()).slice(0, 600) }; }).filter((m) => m.permalink);
   }
+  async function loadMail(fresh) {
+    if (!S.mcp) return;
+    const q = "in:inbox is:unread newer_than:3d -category:promotions -category:social -category:forums -category:updates -subject:invitation -subject:accepted -subject:declined";
+    try {
+      const res = await call("Gmail", "search_threads", { query: q, pageSize: 12, view: "THREAD_VIEW_SUMMARY" }, fresh);
+      S.data.mail = (res.payload?.threads || []).map((t) => { const m = (t.messages || [])[0] || {};
+        const who = (m.addressDisplayNames || []).find((a) => a.emailAddress === m.sender)?.displayName || String(m.sender || "").split("@")[0];
+        return { mail: true, id: t.id, who, ask: m.subject || "(no subject)", summary: m.snippet || "", permalink: t.viewUrl || m.viewUrl, urgency: "today", time: m.date ? new Date(m.date).getTime() : 0 }; });
+      setNote("mail", null); renderSlack();
+    } catch (e) { setNote("mail", [Object.assign(el("b"), { textContent: "Mail" }), errorCopy(e, "Gmail")], needsAsk(e) ? { label: "Allow Gmail", run: () => loadMail(true) } : null); }
+  }
   async function loadSlack(fresh) {
     if (!S.mcp) return;
     if (!CFG.slack.userId) return setNote("slack", [Object.assign(el("b"), { textContent: "Corkboard" }), "Add your Slack user id (slack.userId) to ~/.config/clayday/config.json to fill the board."]);
@@ -1591,6 +1604,7 @@ button, input { font: inherit; color: inherit; }
       now: new Date().toString(),
       meetings: (S.data.meetings || []).filter((m) => m.end.getTime() > t && m.rsvp !== "declined" && !done.has(`meeting:${m.id}`)).map((m) => ({ at: hm(m.start), title: m.title, rsvp: m.rsvp })),
       slack: (S.data.slack || []).filter((m) => !slackDone(done, m)).map((m) => ({ who: m.who, ask: m.ask || m.summary, urgency: m.urgency })),
+      email: (S.data.mail || []).filter((m) => !done.has(`mail:${m.id}`)).map((m) => ({ who: m.who, subject: m.ask })),
       notesToSelf: S.myNotes.filter((n) => !n.doneAt).map((n) => n.text),
       finishedToday: (S.progress.days?.[dayKey()] || []).map((k) => S.progress.titles?.[k]?.title).filter(Boolean).slice(-12),
       sessions: (S.data.sessions || []).filter((s) => !/Clay Studio|Daily dashboard app/i.test(s.title) && !done.has(`session:${s.id}`)).slice(0, 6).map((s) => ({ title: s.title, yourTurn: s.yourTurn, updated: s.updatedAt, stopped: (s.whereItStopped || "").slice(0, 300) })),
@@ -1623,7 +1637,7 @@ button, input { font: inherit; color: inherit; }
   }
   async function refreshAll(fresh) {
     if (busy) return; busy = true; $("refresh").classList.add("busy"); $("refresh").textContent = "Rolling…";
-    try { await cfgReady; await Promise.allSettled([loadMeetings(fresh), loadSlack(fresh), loadHost(fresh)]); await summarize(fresh); }
+    try { await cfgReady; await Promise.allSettled([loadMeetings(fresh), loadSlack(fresh), loadMail(fresh), loadHost(fresh)]); await summarize(fresh); }
     finally { busy = false; $("refresh").classList.remove("busy"); $("refresh").textContent = "Roll to refresh"; pinGroup.position.x = .2; }
   }
   function renderAllLocal() {
