@@ -459,7 +459,7 @@ async function simulatorItems() {
 
 async function pnpmStores() {
   const { repos, pool } = await spongeConfig(); const cwd = repos[0] || pool?.cwd || homedir(); const out = [];
-  for (const bin of PNPM_BINS) { const p = ((await sh(bin, ["store", "path"], { timeout: 20_000, cwd, ...INFRA_ENV })) || "").trim(); if (p && existsSync(p) && !out.some((o) => o.path === p)) out.push({ bin, path: p }); }
+  for (const dir of [cwd, homedir()]) for (const bin of PNPM_BINS) { const p = ((await sh(bin, ["store", "path"], { timeout: 20_000, cwd: dir, ...INFRA_ENV })) || "").trim(); if (p && existsSync(p) && !out.some((o) => o.path === p)) out.push({ bin, path: p }); }
   return out;
 }
 async function pnpmItem() {
@@ -555,8 +555,8 @@ async function runWipeItem(x) {
     else if (x.kind === "docker") { await run("docker", ["system", "prune", "-af"], { timeout: 1_200_000, ...INFRA_ENV }); }
     else if (x.kind === "sims") { for (const id of x.id.slice(5).split(",")) if (/^[0-9A-F-]{36}$/.test(id)) await run("/usr/bin/xcrun", ["simctl", "delete", id], { timeout: 120_000 }); }
     else if (x.kind === "pnpmold") {
-      const stores = await pnpmStores(); const parent = dirname(stores[0].path); const inUse = new Set(stores.map((o) => basename(o.path)));
-      for (const v of x.id.slice(8).split(",")) if (/^v\d+$/.test(v) && !inUse.has(v)) await run("/bin/rm", ["-rf", join(parent, v)], { timeout: 1_200_000 });
+      const stores = await pnpmStores(); const parent = dirname(stores[0].path); const inUse = new Set(stores.filter((o) => dirname(o.path) === parent).map((o) => basename(o.path)));
+      for (const v of x.id.slice(8).split(",")) if (/^v\d+$/.test(v) && !inUse.has(v)) { await run("/bin/rm", ["-rf", join(parent, v)], { timeout: 1_200_000 }); if (existsSync(join(parent, v))) throw new Error(`${v} is still there`); }
     }
     else if (x.kind === "pnpm") { const st = (await pnpmStores())[0]; const { repos, pool } = await spongeConfig(); await run(st.bin, ["store", "prune"], { timeout: 1_200_000, cwd: repos[0] || pool?.cwd || homedir(), ...INFRA_ENV }); }
 }
