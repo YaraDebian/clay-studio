@@ -595,12 +595,12 @@ button, input { font: inherit; color: inherit; }
   const pencil = shadowy(new T.Mesh(new T.CylinderGeometry(.06, .06, 2.4, 6), clayMat(0xFAD47A, .6))); pencil.rotation.z = Math.PI / 2; pencil.rotation.y = .5; pencil.position.set(.8, .27, 1.75); bookGroup.add(pencil);
 
   // jar
-  const JAR = new T.Vector3(6.5, 0, .7);
+  const JAR = new T.Vector3(8.55, 0, -2.5);   // in front of the snake plant
   const jarGlass = new T.Mesh(new T.CylinderGeometry(.62, .56, 1.5, 40, 1, true), toonMat({ color: 0xffffff, roughness: .05, metalness: 0, transparent: true, opacity: .22, side: T.DoubleSide, depthWrite: false }));
   jarGlass.position.set(JAR.x, .75, JAR.z); scene.add(jarGlass);
   jarGlass.userData.info = { jar: true, kindLabel: "Pellet jar", title: "See what you finished today" };
   const jarBase = shadowy(new T.Mesh(new T.CylinderGeometry(.56, .56, .06, 40), toonMat({ color: 0xffffff, transparent: true, opacity: .35, roughness: .1 }))); jarBase.position.set(JAR.x, .03, JAR.z); scene.add(jarBase);
-  const jarLid = shadowy(new T.Mesh(new T.CylinderGeometry(.66, .66, .22, 40), clayMat(CLAY.lilac, .7))); jarLid.position.set(JAR.x + .95, .11, JAR.z + .55); jarLid.rotation.x = .08; scene.add(jarLid);
+  const jarLid = shadowy(new T.Mesh(new T.CylinderGeometry(.66, .66, .22, 40), clayMat(CLAY.lilac, .7))); jarLid.position.set(JAR.x - .3, .11, JAR.z + 1.3); jarLid.rotation.x = .08; scene.add(jarLid);
   let jarLabel = null;
   // rolling pin = refresh
   const pinGroup = new T.Group(); pinGroup.position.set(.2, .26, 4.1); scene.add(pinGroup);
@@ -608,7 +608,7 @@ button, input { font: inherit; color: inherit; }
   [-1, 1].forEach((s) => { const hnd = shadowy(new T.Mesh(new T.CylinderGeometry(.1, .12, .8, 16), clayMat(0xE8798F))); hnd.rotation.z = Math.PI / 2; hnd.position.x = s * 1.7; pinGroup.add(hnd); });
   pinGroup.userData.info = { refresh: true, kindLabel: "Rolling pin", title: "Roll to refresh everything" };
   // sponge + water cup + loop tool (decor)
-  const sponge = new T.Group(); sponge.position.set(7.0, .22, 2.0); sponge.rotation.y = -.2; scene.add(sponge);
+  const sponge = new T.Group(); sponge.position.set(5.9, .22, .95); sponge.rotation.y = .25; scene.add(sponge);
   sponge.add(shadowy(new T.Mesh(softBox(1.1, .44, .75, "sponge"), clayMat(0xFAD47A, 1))));
   for (let i = 0; i < 14; i++) { const pore = new T.Mesh(new T.SphereGeometry(.035 + (i % 3) * .012, 8, 6), toonMat({ color: 0xD9A94E })); pore.position.set(-.45 + ((i * 37) % 90) / 100, .225, -.3 + ((i * 53) % 60) / 100); pore.scale.y = .35; sponge.add(pore); }
   sponge.userData.info = { sponge: true, kindLabel: "Sponge", title: "Wipe away what you no longer need" };
@@ -756,21 +756,47 @@ button, input { font: inherit; color: inherit; }
     const pg = new T.ExtrudeGeometry(sh, { depth: .07, bevelEnabled: true, bevelThickness: .025, bevelSize: .025, bevelSegments: 3, curveSegments: 20 }); pg.rotateX(-Math.PI / 2);
     const board = shadowy(new T.Mesh(pg, clayMat(0xD9B98C))); board.position.y = .03; pal.add(board);
     const paints = [0xC8405E, 0xE0733A, 0xE0A91E, 0x3E9A55, 0x3B7FC4, 0x8A63C9, 0xE9E0CF];
-    paints.forEach((c, i) => { const a = 2.75 - i * .42; const blob = shadowy(new T.Mesh(new T.SphereGeometry(.16 + rnd("paint", i) * .04, 16, 12), clayMat(c)));
-      blob.scale.set(1, .32, .85); blob.position.set(Math.cos(a) * .78 - .1, .13, -Math.sin(a) * .52 - .02); blob.rotation.y = rnd("paint", i + 9) * 3; pal.add(blob); });
-    // a mixed smear in the middle
-    [[0xD0688A, -.15, .05, .22], [0x9A6CC0, .1, .12, .16]].forEach(([c, x, z, r]) => { const sm = new T.Mesh(new T.SphereGeometry(r, 16, 10), clayMat(c)); sm.scale.set(1.3, .12, .8); sm.position.set(x, .12, z); sm.rotation.y = .6; sm.receiveShadow = true; pal.add(sm); });
-    // two brushes: one resting on the palette, one on the table
-    const brush = (x, z, rot, tip, lift) => { const b = new T.Group(); b.position.set(x, lift, z); b.rotation.y = rot; pal.add(b);
-      const h = shadowy(new T.Mesh(new T.CylinderGeometry(.035, .05, 1.5, 10), clayMat(0xE8B98A))); h.rotation.z = Math.PI / 2; b.add(h);
-      const fer = shadowy(new T.Mesh(new T.CylinderGeometry(.052, .052, .22, 10), toonMat({ color: 0xC9C4CC }))); fer.rotation.z = Math.PI / 2; fer.position.x = .82; b.add(fer);
-      const br = shadowy(new T.Mesh(new T.ConeGeometry(.07, .3, 10), clayMat(tip))); br.rotation.z = -Math.PI / 2; br.position.x = 1.06; b.add(br); };
-    brush(-.5, -.25, -.5, 0xC8405E, .17); brush(-.9, 1.25, .25, 0x3B7FC4, .06);
-    // paint pots
-    [[1.75, -.35, 0x8A63C9], [2.25, .2, 0x3E9A55], [1.8, .6, 0xE0A91E]].forEach(([x, z, c], i) => { const pot2 = new T.Group(); pot2.position.set(x, 0, z); pal.add(pot2);
-      const body = shadowy(new T.Mesh(new T.CylinderGeometry(.2, .18, .3, 20), clayMat(0xE4D8C6))); body.position.y = .15; pot2.add(body);
-      const top = new T.Mesh(new T.CircleGeometry(.17, 20), clayMat(c)); top.rotation.x = -Math.PI / 2; top.position.y = .305; pot2.add(top);
-      const band = new T.Mesh(new T.CylinderGeometry(.205, .2, .1, 20, 1, true), clayMat(c)); band.position.y = .14; pot2.add(band); });
+    const shine = new T.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: .8 });
+    const part = (parent, geo, mat, x, y, z, th) => { const m = th === 0 ? new T.Mesh(geo, mat) : shadowy(new T.Mesh(geo, mat), true, true, th || .01); m.position.set(x, y, z); parent.add(m); return m; };
+    // each colour is a squeezed dollop: a soft base, a swirl on top, a curled peak and a wet highlight
+    paints.forEach((c, i) => { const a = 2.75 - i * .42, r = .15 + rnd("paint", i) * .04; const d = new T.Group();
+      d.position.set(Math.cos(a) * .78 - .1, .125, -Math.sin(a) * .52 - .02); d.rotation.y = rnd("paint", i + 9) * 6; pal.add(d);
+      const dark = new T.Color(c).multiplyScalar(.82);
+      part(d, new T.SphereGeometry(r * 1.25, 18, 10), clayMat(dark), 0, .004, 0, 0).scale.set(1.1, .06, .95);          // the thin stain it sits in
+      part(d, new T.SphereGeometry(r, 20, 14), clayMat(c), 0, .02, 0).scale.set(1, .38, .88);
+      part(d, new T.SphereGeometry(r * .62, 16, 12), clayMat(c), r * .12, .07, -r * .08, 0).scale.set(1, .5, .9);
+      const peak = part(d, new T.ConeGeometry(r * .24, r * .7, 12), clayMat(c), r * .2, .12, -r * .1, 0); peak.rotation.z = -.55;
+      part(d, new T.SphereGeometry(r * .16, 8, 6), shine, -r * .38, .07, r * .3, 0).scale.set(1.5, .3, .7); });
+    // where colours were mixed: a smear with brush drags running out of it
+    [[0xD0688A, -.15, .05, .22], [0x9A6CC0, .1, .12, .16]].forEach(([c, x, z, r], n) => { const sm = new T.Mesh(new T.SphereGeometry(r, 16, 10), clayMat(c)); sm.scale.set(1.3, .12, .8); sm.position.set(x, .12, z); sm.rotation.y = .6; sm.receiveShadow = true; pal.add(sm);
+      for (let k = 0; k < 3; k++) { const st = new T.Mesh(new T.SphereGeometry(r * .5, 10, 6), clayMat(new T.Color(c).lerp(new T.Color(0xE9E0CF), .25 + k * .2))); st.scale.set(1.9 - k * .3, .07, .16); st.position.set(x + .16 + k * .05, .118, z - .1 + k * .07 + n * .03); st.rotation.y = .6 + (k - 1) * .12; pal.add(st); } });
+    // brushes: lacquered handle, bare wood grip, crimped metal ferrule, bristles loaded with paint
+    const steel = toonMat({ color: 0xC9C4CC }), brass = toonMat({ color: 0xD9B45A }), hair = clayMat(0xEAD9B5);
+    const brush = (x, z, rot, tip, lift, lacquer, flat) => { const b = new T.Group(); b.position.set(x, lift, z); b.rotation.y = rot; pal.add(b);
+      const along = (geo, mat, px, th, back) => { const m = part(b, geo, mat, px, 0, 0, th); m.rotation.z = back ? Math.PI / 2 : -Math.PI / 2; return m; };
+      along(new T.CylinderGeometry(.02, .044, .72, 12), clayMat(lacquer), -.39, .01, true);
+      part(b, new T.SphereGeometry(.021, 10, 8), clayMat(lacquer), -.75, 0, 0, 0);
+      along(new T.CylinderGeometry(.047, .047, .035, 12), brass, -.02, 0, true);
+      along(new T.CylinderGeometry(.044, .05, .7, 12), clayMat(0xE8B98A), .34, .01, true);
+      along(new T.CylinderGeometry(.05, .058, .26, 14), steel, .82, .01, true);
+      [.75, .8].forEach((px) => { const ring = new T.Mesh(new T.TorusGeometry(.055, .008, 6, 16), toonMat({ color: 0x9C96A3 })); ring.rotation.y = Math.PI / 2; ring.position.x = px; b.add(ring); });
+      const head = new T.Group(); head.position.x = .95; if (flat) head.scale.set(1, .55, 1.35); b.add(head);
+      const belly = part(head, new T.CylinderGeometry(.066, .056, .16, 14), hair, .08, 0, 0, .01); belly.rotation.z = -Math.PI / 2;
+      const wet = part(head, flat ? new T.CylinderGeometry(.058, .066, .12, 14) : new T.ConeGeometry(.066, .24, 14), clayMat(tip), flat ? .22 : .28, 0, 0, .01); wet.rotation.z = -Math.PI / 2;
+      part(head, new T.SphereGeometry(.02, 8, 6), shine, .2, .05, .02, 0).scale.set(2.2, .4, .6); };
+    brush(.565, .587, 2.9, 0xC8405E, .175, 0x3F5E9A, false);   // lies along the front of the board, clear of the dollops brush(-.9, 1.25, .25, 0x3B7FC4, .06, 0xB8434E, true);
+    // a dab the resting brush left on the table
+    { const dab = new T.Mesh(new T.SphereGeometry(.09, 12, 8), clayMat(0x3B7FC4)); dab.scale.set(1.5, .08, .9); dab.position.set(.42, .012, 1.04); dab.rotation.y = .25; pal.add(dab); }
+    // paint pots: glazed rim, a wet surface, a paper label and a drip down the side
+    [[1.75, -.35, 0x8A63C9], [2.25, .2, 0x3E9A55], [1.8, .6, 0xE0A91E]].forEach(([x, z, c], i) => { const pot2 = new T.Group(); pot2.position.set(x, 0, z); pot2.rotation.y = rnd("pot", i) * 6; pal.add(pot2);
+      part(pot2, new T.CylinderGeometry(.2, .18, .3, 24), clayMat(0xE4D8C6), 0, .15, 0);
+      const rim = part(pot2, new T.TorusGeometry(.195, .022, 8, 28), clayMat(0xF3EADB), 0, .3, 0, 0); rim.rotation.x = Math.PI / 2;
+      const top = part(pot2, new T.CircleGeometry(.178, 24), clayMat(c), 0, .292, 0, 0); top.rotation.x = -Math.PI / 2;
+      const gl = part(pot2, new T.CircleGeometry(.05, 12), shine, -.06, .295, .05, 0); gl.rotation.x = -Math.PI / 2; gl.scale.set(1.6, .6, 1);
+      part(pot2, new T.CylinderGeometry(.197, .19, .13, 24, 1, true, -.9, 1.8), toonMat({ color: 0xFFFDF8, side: T.DoubleSide }), 0, .15, 0, 0);
+      part(pot2, new T.CylinderGeometry(.199, .194, .05, 24, 1, true, -.6, 1.2), toonMat({ color: c, side: T.DoubleSide }), 0, .15, 0, 0);
+      const drip = part(pot2, new T.SphereGeometry(.035, 10, 8), clayMat(c), -.196, .23, .02, 0); drip.scale.set(.5, 2.2, .9);
+      part(pot2, new T.SphereGeometry(.03, 10, 8), clayMat(c), -.2, .165, .02, 0).scale.set(.6, 1, .9); });
   }
 
   cork.userData.info = { addNote: true, kindLabel: "Corkboard", title: "Pin a new sticky note" };
