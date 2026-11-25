@@ -608,7 +608,7 @@ button, input { font: inherit; color: inherit; }
   [-1, 1].forEach((s) => { const hnd = shadowy(new T.Mesh(new T.CylinderGeometry(.1, .12, .8, 16), clayMat(0xE8798F))); hnd.rotation.z = Math.PI / 2; hnd.position.x = s * 1.7; pinGroup.add(hnd); });
   pinGroup.userData.info = { refresh: true, kindLabel: "Rolling pin", title: "Roll to refresh everything" };
   // sponge + water cup + loop tool (decor)
-  const sponge = new T.Group(); sponge.position.set(5.0, .22, -.5); sponge.rotation.y = .3; scene.add(sponge);
+  const sponge = new T.Group(); sponge.position.set(7.0, .22, 2.0); sponge.rotation.y = -.2; scene.add(sponge);
   sponge.add(shadowy(new T.Mesh(softBox(1.1, .44, .75, "sponge"), clayMat(0xFAD47A, 1))));
   for (let i = 0; i < 14; i++) { const pore = new T.Mesh(new T.SphereGeometry(.035 + (i % 3) * .012, 8, 6), toonMat({ color: 0xD9A94E })); pore.position.set(-.45 + ((i * 37) % 90) / 100, .225, -.3 + ((i * 53) % 60) / 100); pore.scale.y = .35; sponge.add(pore); }
   sponge.userData.info = { sponge: true, kindLabel: "Sponge", title: "Wipe away what you no longer need" };
@@ -750,7 +750,7 @@ button, input { font: inherit; color: inherit; }
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") applyTime(); });
 
   // ---- paint palette, brushes and little paint pots ----
-  { const pal = new T.Group(); pal.position.set(2.5, 0, -.9); pal.rotation.y = .35; pal.scale.setScalar(1.3); scene.add(pal);
+  { const pal = new T.Group(); pal.position.set(4.6, 0, -1.0); pal.rotation.y = .35; pal.scale.setScalar(1.3); scene.add(pal);
     const sh = new T.Shape(); sh.moveTo(-1.15, 0); sh.bezierCurveTo(-1.2, .75, -.3, .95, .45, .8); sh.bezierCurveTo(1.25, .65, 1.4, -.1, .95, -.55); sh.bezierCurveTo(.5, -.95, -.1, -.6, -.45, -.7); sh.bezierCurveTo(-.95, -.8, -1.12, -.45, -1.15, 0);
     const hole = new T.Path(); hole.absellipse(.72, -.12, .2, .15, 0, Math.PI * 2, true); sh.holes.push(hole);
     const pg = new T.ExtrudeGeometry(sh, { depth: .07, bevelEnabled: true, bevelThickness: .025, bevelSize: .025, bevelSegments: 3, curveSegments: 20 }); pg.rotateX(-Math.PI / 2);
@@ -1007,11 +1007,48 @@ button, input { font: inherit; color: inherit; }
       x.fillStyle = "rgba(255,255,255,.85)"; for (let r = 0; r < 4; r++) for (let c = 0; c < 8; c++) { x.beginPath(); x.arc(c * 32 + (r % 2) * 16 + 8, 20 + r * 30, 6, 0, Math.PI * 2); x.fill(); }
     });
   }
+  // prototypes are not pieces yet: they are a list on a sketch pad beside the mat
+  const PAD = { w: 2.0, d: 2.5, rows: 8, px: 512, py: 640, top: 150, step: 58 };
+  function padTexture(items) {
+    return canvasTex(PAD.px, PAD.py, (x, w, h) => {
+      x.fillStyle = "#FFFDF8"; x.fillRect(0, 0, w, h);
+      x.strokeStyle = "rgba(120,150,210,.3)"; x.lineWidth = 2; for (let y = PAD.top; y < h; y += PAD.step) { x.beginPath(); x.moveTo(20, y); x.lineTo(w - 20, y); x.stroke(); }
+      x.fillStyle = "#EE7D96"; x.font = "400 50px 'Patrick Hand', cursive"; x.fillText("sketches", 32, 100);
+      // a small pencil vase in the corner
+      x.strokeStyle = "#5B4A63"; x.lineWidth = 3; x.lineCap = "round"; const cx = w - 80;
+      for (const sd of [-1, 1]) { x.beginPath(); x.moveTo(cx + sd * 14, 40); x.bezierCurveTo(cx + sd * 10, 60, cx + sd * 40, 70, cx + sd * 34, 100); x.quadraticCurveTo(cx + sd * 30, 118, cx + sd * 20, 122); x.stroke(); }
+      x.beginPath(); x.ellipse(cx, 40, 14, 4, 0, 0, Math.PI * 2); x.stroke(); x.beginPath(); x.moveTo(cx - 20, 122); x.lineTo(cx + 20, 122); x.stroke();
+      x.font = "400 34px 'Patrick Hand', cursive";
+      items.slice(0, PAD.rows).forEach(({ p }, i) => {
+        const y = PAD.top + (i + 1) * PAD.step - 14;
+        x.fillStyle = "#EE7D96"; x.fillText(`#${p.number}`, 32, y);
+        x.fillStyle = "#5B4A63"; x.fillText(wrapLines(x, p.title.replace(/^\w+(\([^)]*\))?!?:\s*/, ""), w - 180, 1)[0] || "", 160, y);
+      });
+      if (items.length > PAD.rows) { x.fillStyle = "rgba(91,74,99,.6)"; x.fillText(`+ ${items.length - PAD.rows} more`, 160, PAD.top + (PAD.rows + 1) * PAD.step - 14); }
+    });
+  }
+  function drawPad(items) {
+    if (!items.length) return;
+    const g = new T.Group(); g.position.set(1.85, 0, -.9); g.rotation.y = .06;
+    const pad = shadowy(new T.Mesh(new T.BoxGeometry(PAD.w, .06, PAD.d), toonMat({ color: 0xFFF4DC }))); pad.position.y = .03; g.add(pad);
+    const page = new T.Mesh(new T.PlaneGeometry(PAD.w - .08, PAD.d - .1), new T.MeshBasicMaterial({ map: padTexture(items) })); page.rotation.x = -Math.PI / 2; page.position.y = .062; g.add(page);
+    for (let i = 0; i < 9; i++) { const ring = new T.Mesh(new T.TorusGeometry(.07, .015, 8, 16), toonMat({ color: 0xB9B1C0, roughness: .3, metalness: .6 })); ring.position.set(-PAD.w / 2 + .2 + i * (PAD.w - .4) / 8, .07, -PAD.d / 2 + .04); g.add(ring); }
+    groups.pieces.add(g);
+    const H = PAD.d - .1, rowD = H * PAD.step / PAD.py;
+    items.slice(0, PAD.rows).forEach(({ info }, i) => {
+      const row = new T.Mesh(new T.PlaneGeometry(PAD.w - .1, rowD), new T.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }));
+      row.rotation.x = -Math.PI / 2; row.position.set(0, .07, -H / 2 + (PAD.top + (i + .5) * PAD.step) / PAD.py * H);
+      row.userData.info = info; g.add(row); picks.pieces.push(row);
+    });
+  }
+  const isPrototype = (p) => /prototype/i.test(p.title || "");
   function renderPrs() {
     clearGroup("pieces"); drawMarketCal();
     const { mine = [], toReview = [], awaitingDeploy = [], lastProductionDeploy } = S.data.prs || {}; const done = doneEver();
     const rank = (p) => (p.ci?.state === "failing" ? 0 : 2) + (p.review === "CHANGES_REQUESTED" ? -1 : 0) + (p.mergeable === "CONFLICTING" ? -1 : 0);
+    const protos = [];
     const place = (p, key, pos, opts) => {
+      if (isPrototype(p)) { protos.push({ p, info: { ...opts.info, kindLabel: `Sketch · ${opts.info.kindLabel}` } }); return; }
       const g = new T.Group(); const ci = p.ci?.state; let m;
       if (opts.painted) { m = toonMat({ color: 0xffffff }); m.map = paintTexture(CLAY[opts.color], CLAY[opts.band || "rose"]); }
       else {
@@ -1032,8 +1069,8 @@ button, input { font: inherit; color: inherit; }
       groups.pieces.add(g); picks.pieces.push(g);
       addTag("pieces", g, opts.painted ? `#${p.number} ✓` : `#${p.number}`, ci === "failing" ? "turn" : "", opts.lift);
     };
-    // being shaped: open PRs sit on the cutting mat, front row
-    [...mine].sort((a, b) => rank(a) - rank(b)).filter((p) => !done.has(`pr:${p.number}`)).slice(0, 7).forEach((p, i) => {
+    // being shaped: open PRs sit on the cutting mat, front row; prototypes go on the sketch pad
+    [...mine].sort((a, b) => isPrototype(a) - isPrototype(b) || rank(a) - rank(b)).filter((p) => !done.has(`pr:${p.number}`)).slice(0, 7).forEach((p, i) => {
       const key = `pr:${p.number}`; const ci = p.ci?.state;
       place(p, key, new T.Vector3(-6.1 + i * 1.0, .03, 3.25 + (rnd(key, 1) - .5) * .25), { color: clayFor(String(p.number)), lift: 1.45, info: {
         key, kind: "pr", kindLabel: "Pull request · still being shaped", title: p.title, href: p.url, goLabel: "Open on GitHub",
@@ -1044,7 +1081,7 @@ button, input { font: inherit; color: inherit; }
     });
     // finished: merged PRs drying on the rack until the next production deploy
     const bands = ["rose", "mint", "lilac", "butter"];
-    awaitingDeploy.slice(0, 14).forEach((p, i) => {
+    [...awaitingDeploy].sort((a, b) => isPrototype(a) - isPrototype(b)).slice(0, 14).forEach((p, i) => {
       const key = `shipped:${p.number}`;
       place(p, key, new T.Vector3(RACK.x - RACK.w / 2 + .45 + (i % 7) * .66, (i < 7 ? RACK.shelves[2] : RACK.shelves[1]) + .04, RACK.z + (rnd(key, 1) - .5) * .4),
         { painted: true, color: clayFor(String(p.number)), band: bands[i % 4], lift: 1.4 + (i % 2) * .45, info: {
@@ -1052,12 +1089,13 @@ button, input { font: inherit; color: inherit; }
           meta: [["Merged", "ok"], [`merged ${ago(p.mergedAt)}`], ["Waiting for production deploy", "warn"]],
           more: lastProductionDeploy ? `Last production deploy: ${lastProductionDeploy.replace("production-", "").replace(/^(\d{4})(\d\d)(\d\d)T(\d\d)(\d\d)Z$/, "$3/$2 $4:$5 UTC")}` : "" } });
     });
-    toReview.filter((p) => !done.has(`review:${p.url}`)).slice(0, 7).forEach((p, i) => {
+    toReview.filter((p) => !done.has(`review:${p.url}`)).sort((a, b) => isPrototype(a) - isPrototype(b)).slice(0, 7).forEach((p, i) => {
       const key = `review:${p.url}`;
       place(p, key, new T.Vector3(RACK.x - RACK.w / 2 + .45 + i * .66, RACK.shelves[0] + .04, RACK.z + (rnd(key, 1) - .5) * .4), { color: "peach", lift: 1.4 + (i % 2) * .45,
         info: { key, kind: "pr", kindLabel: "Review asked of you", title: p.title, href: p.url, goLabel: "Review on GitHub",
           meta: [["Review asked", "warn"], [`${p.repo || ""}#${p.number}`], [`by ${p.author || "someone"}`], [ago(p.updatedAt)]] } });
     });
+    drawPad(protos);
     rebuildA11y();
   }
 
